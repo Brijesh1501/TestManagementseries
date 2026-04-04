@@ -114,15 +114,6 @@
 
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
-  <script>
-    window.addEventListener('DOMContentLoaded', () => {
-      if (typeof SUPABASE_URL === 'undefined' || SUPABASE_URL.includes('YOUR_PROJECT_ID') || SUPABASE_ANON_KEY.includes('YOUR_ANON_KEY')) {
-        const banner = document.createElement('div');
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#dc2626;color:#fff;text-align:center;font-size:13px;font-weight:600;padding:10px 16px;';
-        banner.innerHTML = '⚠️ Supabase not configured! Open <code style="background:#991b1b;padding:2px 6px;border-radius:4px;">js/config.js</code> and replace YOUR_PROJECT_ID and YOUR_ANON_KEY with your real Supabase credentials.';
-        document.body.prepend(banner);
-      }
-    });
-  </script>
+
 </body>
 </html>

@@ -9,211 +9,164 @@
 <body class="bg-slate-900 min-h-screen p-8 text-white font-mono text-sm">
   <div class="max-w-2xl mx-auto">
     <h1 class="text-2xl font-bold text-white mb-2">🔍 Supabase Debug Panel</h1>
-    <p class="text-slate-400 mb-6 text-xs">This page tests your Supabase connection step by step. Open browser Console (F12) for full details.</p>
+    <p class="text-slate-400 mb-6 text-xs">Tests your Supabase connection step by step.</p>
 
     <div id="log" class="space-y-2 mb-6"></div>
 
     <div class="grid grid-cols-2 gap-3 mb-6">
       <button onclick="testConnection()" class="px-4 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-sm">1. Test Connection</button>
-      <button onclick="testSignUp()" class="px-4 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-sm">2. Test Sign Up</button>
-      <button onclick="testSignIn()" class="px-4 py-3 bg-yellow-500 hover:bg-yellow-400 rounded-xl font-bold text-sm text-black">3. Test Sign In</button>
-      <button onclick="testProfile()" class="px-4 py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold text-sm">4. Test Profile Read</button>
-      <button onclick="testTables()" class="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm">5. Check All Tables</button>
-      <button onclick="clearLog()" class="px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold text-sm">Clear Log</button>
+      <button onclick="testSignUp()"    class="px-4 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-sm">2. Test Sign Up</button>
+      <button onclick="testSignIn()"    class="px-4 py-3 bg-yellow-500 hover:bg-yellow-400 rounded-xl font-bold text-sm text-black">3. Test Sign In</button>
+      <button onclick="testProfile()"   class="px-4 py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold text-sm">4. Test Profile</button>
+      <button onclick="testTables()"    class="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm">5. Check Tables</button>
+      <button onclick="clearLog()"      class="px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold text-sm">Clear Log</button>
     </div>
 
     <div class="bg-slate-800 rounded-xl p-4 mb-4">
-      <p class="text-slate-400 text-xs mb-2 font-bold">TEST USER CREDENTIALS (used for test signup/signin):</p>
-      <input id="test-email" type="email" value="testuser123@gmail.com"
-        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none focus:border-indigo-400" />
-      <input id="test-password" type="text" value="Test@123456"
-        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-400" />
+      <p class="text-slate-400 text-xs mb-2 font-bold">TEST CREDENTIALS:</p>
+      <input id="test-email"    type="email" value="testuser123@gmail.com"
+        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none" />
+      <input id="test-password" type="text"  value="Test@123456"
+        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none" />
     </div>
 
     <a href="index.html" class="text-indigo-400 hover:text-indigo-300 text-xs underline">← Back to Login</a>
   </div>
 
-  <script>
-    // ── CONFIG ──────────────────────────────────────────────
-    const SUPABASE_URL     = 'https://clvqomxagijowwvpkyzb.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsdnFvbXhhZ2lqb3d3dnBreXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzk2MTEsImV4cCI6MjA5MDg1NTYxMX0.gf4zj3TdSCscH-6wqGdH5SBjdyMrOHPXytToubGyikw';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    // ────────────────────────────────────────────────────────
+<script>
+// ── Standalone Supabase init (no config.js dependency) ──
+const _DB_URL  = 'https://clvqomxagijowwvpkyzb.supabase.co';
+const _DB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsdnFvbXhhZ2lqb3d3dnBreXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzk2MTEsImV4cCI6MjA5MDg1NTYxMX0.gf4zj3TdSCscH-6wqGdH5SBjdyMrOHPXytToubGyikw';
+const _client  = window.supabase.createClient(_DB_URL, _DB_KEY);
 
-    function log(msg, type = 'info') {
-      const colors = { info: 'text-blue-400', ok: 'text-green-400', error: 'text-red-400', warn: 'text-yellow-400', data: 'text-slate-300' };
-      const icons  = { info: 'ℹ', ok: '✅', error: '❌', warn: '⚠️', data: '📦' };
-      const el = document.createElement('div');
-      el.className = `flex gap-2 ${colors[type]} bg-slate-800 rounded-lg px-3 py-2`;
-      el.innerHTML = `<span class="flex-shrink-0">${icons[type]}</span><span class="break-all">${msg}</span>`;
-      document.getElementById('log').appendChild(el);
-      console.log(`[${type.toUpperCase()}]`, msg);
-      el.scrollIntoView({ behavior: 'smooth' });
+// ── Logging ──────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const colors = { info:'text-blue-400', ok:'text-green-400', error:'text-red-400', warn:'text-yellow-400', data:'text-slate-300' };
+  const icons  = { info:'ℹ', ok:'✅', error:'❌', warn:'⚠️', data:'📦' };
+  const el = document.createElement('div');
+  el.className = `flex gap-2 ${colors[type]} bg-slate-800 rounded-lg px-3 py-2`;
+  el.innerHTML = `<span class="flex-shrink-0">${icons[type]}</span><pre class="break-all whitespace-pre-wrap text-xs">${msg}</pre>`;
+  document.getElementById('log').appendChild(el);
+  el.scrollIntoView({ behavior:'smooth' });
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+// ── TEST 1: Connection ────────────────────────────────────
+async function testConnection() {
+  clearLog();
+  log('Testing Supabase connection…');
+  log('URL: ' + _DB_URL, 'data');
+  try {
+    const start = Date.now();
+    const { error } = await _client.from('profiles').select('*', { count:'exact', head:true });
+    const ms = Date.now() - start;
+    if (error) {
+      log(`Connected but query failed: ${error.message} [${error.code}]`, 'warn');
+      if (error.code === '42P01') log('Table "profiles" does not exist → Run schema_update.sql in Supabase SQL Editor', 'error');
+    } else {
+      log(`Connected! Response in ${ms}ms`, 'ok');
     }
+  } catch(e) {
+    log('FATAL — cannot reach Supabase: ' + e.message, 'error');
+  }
+}
 
-    function clearLog() { document.getElementById('log').innerHTML = ''; }
+// ── TEST 2: Sign Up ───────────────────────────────────────
+async function testSignUp() {
+  const email    = document.getElementById('test-email').value.trim();
+  const password = document.getElementById('test-password').value.trim();
+  log('Testing signUp → ' + email);
+  try {
+    const { data, error } = await _client.auth.signUp({
+      email, password,
+      options: { data: { full_name: 'Test User', role: 'student' } }
+    });
+    if (error) {
+      log('signUp FAILED: ' + error.message, 'error');
+      if (error.message.toLowerCase().includes('not allowed') || error.message.toLowerCase().includes('disabled'))
+        log('FIX → Supabase Dashboard → Authentication → Settings → Enable sign-ups = ON', 'warn');
+      if (error.message.toLowerCase().includes('already'))
+        log('User already exists — try Test 3 (Sign In) instead', 'warn');
+    } else {
+      log('signUp response received', 'ok');
+      log('User ID: ' + (data?.user?.id || 'null'), data?.user ? 'ok' : 'error');
+      log('Session: ' + (data?.session ? 'YES ✅ (email confirmation is OFF — good!)' : 'NO ⚠️ (email confirmation is ON)'), data?.session ? 'ok' : 'warn');
+      if (!data?.session) {
+        log('FIX → Supabase → Authentication → Settings → Email → Disable "Enable email confirmations"', 'warn');
+      }
+      if (data?.user) {
+        log('email_confirmed_at: ' + (data.user.email_confirmed_at || 'null'), data.user.email_confirmed_at ? 'ok' : 'warn');
 
-    // ── TEST 1: Connection ───────────────────────────────────
-    async function testConnection() {
-      clearLog();
-      log('Testing connection to Supabase…');
-      log(`URL: ${SUPABASE_URL}`, 'data');
-
-      try {
-        const start = Date.now();
-        const { data, error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
-        const ms = Date.now() - start;
-
-        if (error) {
-          log(`Connection OK but query failed: ${error.message} (code: ${error.code})`, 'warn');
-          log('This usually means the "profiles" table does not exist yet — run schema_update.sql', 'warn');
-        } else {
-          log(`✅ Connected successfully in ${ms}ms`, 'ok');
-          log(`Profiles table exists. Row count: ${data ?? 'N/A'}`, 'ok');
-        }
-      } catch (e) {
-        log(`FATAL: Cannot reach Supabase — ${e.message}`, 'error');
-        log('Check: Is your internet connected? Is the Supabase URL correct?', 'error');
+        // Try inserting profile manually
+        log('Attempting profile upsert…');
+        const { error: pe } = await _client.from('profiles').upsert({
+          id: data.user.id,
+          full_name: 'Test User',
+          email: email,
+          role: 'student',
+          is_active: true
+        }, { onConflict: 'id' });
+        if (pe) log('Profile upsert FAILED: ' + pe.message + ' [' + pe.code + ']', 'error');
+        else log('Profile upserted successfully', 'ok');
       }
     }
+  } catch(e) {
+    log('EXCEPTION: ' + e.message, 'error');
+  }
+}
 
-    // ── TEST 2: Sign Up ──────────────────────────────────────
-    async function testSignUp() {
-      const email    = document.getElementById('test-email').value.trim();
-      const password = document.getElementById('test-password').value.trim();
-      log(`Attempting sign up with: ${email}`);
-
-      try {
-        const { data, error } = await supabase.auth.signUp({
-          email, password,
-          options: { data: { full_name: 'Test User', role: 'student' } }
-        });
-
-        if (error) {
-          log(`Sign up FAILED: ${error.message}`, 'error');
-          log(`Error code: ${error.status} — ${error.code || 'no code'}`, 'error');
-
-          if (error.message.includes('not allowed') || error.message.includes('disabled')) {
-            log('⚠️ Sign-ups are DISABLED in your Supabase project!', 'warn');
-            log('Fix: Supabase Dashboard → Authentication → Settings → Enable sign-ups → ON', 'warn');
-          }
-          if (error.message.includes('email')) {
-            log('⚠️ Email issue — possibly rate limited or invalid domain', 'warn');
-          }
-        } else {
-          log(`Sign up response received`, 'ok');
-          log(`User ID: ${data?.user?.id || 'null'}`, data?.user ? 'ok' : 'warn');
-          log(`Session: ${data?.session ? 'YES (email confirmation OFF)' : 'NO (email confirmation ON — check inbox)'}`,
-              data?.session ? 'ok' : 'warn');
-          log(`Email confirmed: ${data?.user?.email_confirmed_at ? 'YES' : 'NO'}`,
-              data?.user?.email_confirmed_at ? 'ok' : 'warn');
-
-          if (!data?.session && !data?.user?.email_confirmed_at) {
-            log('ACTION NEEDED: Go to Supabase → Authentication → Settings → Disable "Enable email confirmations"', 'warn');
-          }
-          if (data?.user) {
-            log(`Full user object: ${JSON.stringify(data.user, null, 2)}`, 'data');
-          }
-        }
-      } catch (e) {
-        log(`EXCEPTION during signUp: ${e.message}`, 'error');
-        console.error(e);
-      }
+// ── TEST 3: Sign In ───────────────────────────────────────
+async function testSignIn() {
+  const email    = document.getElementById('test-email').value.trim();
+  const password = document.getElementById('test-password').value.trim();
+  log('Testing signIn → ' + email);
+  try {
+    const { data, error } = await _client.auth.signInWithPassword({ email, password });
+    if (error) {
+      log('signIn FAILED: ' + error.message, 'error');
+      if (error.message.includes('Email not confirmed'))
+        log('FIX → Disable email confirmation in Supabase Auth Settings', 'warn');
+      if (error.message.includes('Invalid login credentials'))
+        log('User may not exist yet — run Test 2 first', 'warn');
+    } else {
+      log('signIn SUCCESS!', 'ok');
+      log('User: ' + data.user?.email + ' | ID: ' + data.user?.id, 'ok');
     }
+  } catch(e) {
+    log('EXCEPTION: ' + e.message, 'error');
+  }
+}
 
-    // ── TEST 3: Sign In ──────────────────────────────────────
-    async function testSignIn() {
-      const email    = document.getElementById('test-email').value.trim();
-      const password = document.getElementById('test-password').value.trim();
-      log(`Attempting sign in with: ${email}`);
+// ── TEST 4: Profile ───────────────────────────────────────
+async function testProfile() {
+  log('Checking session + profile…');
+  const { data: { session } } = await _client.auth.getSession();
+  if (!session) { log('No active session — run Test 3 (Sign In) first', 'warn'); return; }
+  log('Session OK: ' + session.user.email, 'ok');
+  const { data: profile, error } = await _client.from('profiles').select('*').eq('id', session.user.id).single();
+  if (error) {
+    log('Profile fetch FAILED: ' + error.message + ' [' + error.code + ']', 'error');
+    if (error.code === 'PGRST116') log('Profile row missing → Run schema_update.sql and re-register', 'warn');
+  } else {
+    log('Profile found!', 'ok');
+    log(JSON.stringify(profile, null, 2), 'data');
+  }
+}
 
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+// ── TEST 5: All Tables ────────────────────────────────────
+async function testTables() {
+  clearLog();
+  log('Checking all 8 required tables…');
+  const tables = ['profiles','test_series','questions','test_attempts','attempt_answers','bookmarks','notifications','system_settings'];
+  for (const t of tables) {
+    const { count, error } = await _client.from(t).select('*', { count:'exact', head:true });
+    if (error) log(`${t}: ${error.message} [${error.code}]`, 'error');
+    else       log(`${t}: exists — ${count ?? 0} rows`, 'ok');
+  }
+}
 
-        if (error) {
-          log(`Sign in FAILED: ${error.message}`, 'error');
-          if (error.message.includes('Email not confirmed')) {
-            log('Fix: Disable email confirmation in Supabase → Auth → Settings', 'warn');
-          }
-          if (error.message.includes('Invalid login credentials')) {
-            log('User may not exist yet — run Test 2 (Sign Up) first', 'warn');
-          }
-        } else {
-          log(`Sign in SUCCESS!`, 'ok');
-          log(`User: ${data.user?.email} | ID: ${data.user?.id}`, 'ok');
-          log(`Session token: ${data.session?.access_token?.substring(0, 40)}…`, 'data');
-        }
-      } catch (e) {
-        log(`EXCEPTION during signIn: ${e.message}`, 'error');
-      }
-    }
-
-    // ── TEST 4: Profile Read ─────────────────────────────────
-    async function testProfile() {
-      log('Checking current session and profile…');
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        log('No active session — sign in first (Test 3)', 'warn');
-        return;
-      }
-
-      log(`Session found for: ${session.user.email}`, 'ok');
-
-      const { data: profile, error } = await supabase
-        .from('profiles').select('*').eq('id', session.user.id).single();
-
-      if (error) {
-        log(`Profile fetch FAILED: ${error.message} (${error.code})`, 'error');
-        if (error.code === 'PGRST116') {
-          log('Profile row does not exist — trigger may not have run', 'warn');
-          log('Fix: Run schema_update.sql in Supabase SQL Editor', 'warn');
-          log('Attempting manual profile insert…', 'info');
-
-          const { error: ie } = await supabase.from('profiles').insert({
-            id: session.user.id,
-            full_name: session.user.user_metadata?.full_name || 'Test User',
-            email: session.user.email,
-            role: 'student',
-            is_active: true
-          });
-          if (ie) log(`Manual insert also FAILED: ${ie.message}`, 'error');
-          else log('Manual profile insert succeeded!', 'ok');
-        }
-      } else {
-        log(`Profile found!`, 'ok');
-        log(JSON.stringify(profile, null, 2), 'data');
-      }
-    }
-
-    // ── TEST 5: All Tables ───────────────────────────────────
-    async function testTables() {
-      clearLog();
-      log('Checking all required tables…');
-
-      const tables = [
-        'profiles', 'test_series', 'questions',
-        'test_attempts', 'attempt_answers', 'bookmarks',
-        'notifications', 'system_settings'
-      ];
-
-      for (const table of tables) {
-        try {
-          const { count, error } = await supabase
-            .from(table).select('*', { count: 'exact', head: true });
-          if (error) {
-            log(`${table}: ❌ ${error.message}`, 'error');
-          } else {
-            log(`${table}: ✅ exists (${count ?? 0} rows)`, 'ok');
-          }
-        } catch (e) {
-          log(`${table}: ❌ exception — ${e.message}`, 'error');
-        }
-      }
-    }
-
-    // Auto-run connection test on load
-    window.addEventListener('DOMContentLoaded', testConnection);
-  </script>
+// Auto-run on load
+window.addEventListener('DOMContentLoaded', testConnection);
+</script>
 </body>
 </html>

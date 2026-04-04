@@ -1,4 +1,4 @@
-// auth.js — Login / Register logic (v2 — fully fixed)
+// auth.js — v3 (Vercel + Supabase compatible)
 
 function switchTab(tab) {
   const isLogin = tab === 'login';
@@ -41,20 +41,27 @@ async function handleRegister() {
   setLoading('reg', true);
 
   try {
-    // 1. Create auth user
+    console.log('[AUTH] Starting signUp for:', email);
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: name, role: 'student' } }
+      options: {
+        data: { full_name: name, role: 'student' },
+        emailRedirectTo: window.location.origin + '/dashboard.html'
+      }
     });
+
+    console.log('[AUTH] signUp response:', { data, error });
 
     if (error) throw error;
 
     const user = data?.user;
-    if (!user) throw new Error('No user returned from signUp.');
+    if (!user) throw new Error('No user returned from Supabase signUp.');
 
-    // 2. Manually upsert profile (don't rely solely on DB trigger)
-    const { error: profileError } = await supabase.from('profiles').upsert({
+    // Always manually upsert profile — don't rely only on trigger
+    console.log('[AUTH] Upserting profile for user:', user.id);
+    const { error: profileErr } = await supabase.from('profiles').upsert({
       id:        user.id,
       full_name: name,
       email:     email,
@@ -62,39 +69,47 @@ async function handleRegister() {
       is_active: true
     }, { onConflict: 'id' });
 
-    if (profileError) console.warn('Profile upsert warning:', profileError.message);
-
-    // 3. Check if we got a session (email confirmation OFF) or not (email confirmation ON)
-    if (data.session) {
-      // Email confirmation is DISABLED — user is already logged in
-      UI.showToast('🎉 Account created! Redirecting to dashboard…', 'success');
-      setTimeout(() => { window.location.href = 'dashboard.html'; }, 900);
+    if (profileErr) {
+      console.warn('[AUTH] Profile upsert warning:', profileErr.message);
     } else {
-      // Email confirmation is ENABLED — Supabase sent a confirmation email
+      console.log('[AUTH] Profile upserted successfully');
+    }
+
+    // Check if session exists (email confirmation OFF) or not (email confirmation ON)
+    if (data.session) {
+      console.log('[AUTH] Session received — redirecting to dashboard');
+      UI.showToast('🎉 Account created! Redirecting…', 'success');
+      setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+    } else {
+      console.log('[AUTH] No session — email confirmation required');
       setLoading('reg', false);
-      showSuccessBanner(email);
+      showEmailConfirmBanner(name, email);
     }
 
   } catch (e) {
-    console.error('Register error:', e);
-    UI.showToast(friendlyError(e.message), 'error', 6000);
+    console.error('[AUTH] Register error:', e);
+    UI.showToast(friendlyError(e.message), 'error', 7000);
     setLoading('reg', false);
   }
 }
 
-// Show a nice banner instead of just a toast when email confirmation needed
-function showSuccessBanner(email) {
-  const formEl = document.getElementById('form-register');
-  formEl.innerHTML = `
-    <div class="text-center py-4">
-      <div class="text-5xl mb-4">📧</div>
-      <h3 class="text-white font-bold text-lg mb-2">Check your email!</h3>
-      <p class="text-white/70 text-sm mb-1">We sent a confirmation link to:</p>
-      <p class="text-indigo-300 font-semibold text-sm mb-5">${email}</p>
-      <p class="text-white/50 text-xs mb-6">Click the link in the email, then come back and sign in.</p>
+function showEmailConfirmBanner(name, email) {
+  document.getElementById('form-register').innerHTML = `
+    <div class="text-center py-2">
+      <div class="text-5xl mb-3">📧</div>
+      <h3 class="text-white font-bold text-lg mb-2">Hi ${name}! Check your email</h3>
+      <p class="text-white/60 text-sm mb-1">Confirmation link sent to:</p>
+      <p class="text-indigo-300 font-bold text-sm mb-4">${email}</p>
+      <div class="bg-white/10 rounded-xl p-4 mb-5 text-left space-y-2">
+        <p class="text-white/70 text-xs font-semibold uppercase tracking-wide">To skip email confirmation:</p>
+        <p class="text-white/60 text-xs">1. Go to Supabase Dashboard</p>
+        <p class="text-white/60 text-xs">2. Authentication → Settings → Email</p>
+        <p class="text-white/60 text-xs">3. Toggle OFF "Enable email confirmations"</p>
+        <p class="text-white/60 text-xs">4. Register again — you'll go straight to dashboard</p>
+      </div>
       <button onclick="switchTab('login')"
-        class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all text-sm">
-        Go to Sign In →
+        class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm transition-all">
+        I've confirmed — Sign In →
       </button>
     </div>`;
 }
@@ -110,22 +125,25 @@ async function handleLogin() {
   setLoading('login', true);
 
   try {
+    console.log('[AUTH] Starting signIn for:', email);
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    console.log('[AUTH] signIn response:', { user: data?.user?.id, error });
+
     if (error) throw error;
 
     const user = data?.user;
-    if (!user) throw new Error('No user returned from signIn.');
+    if (!user) throw new Error('No user returned from Supabase signIn.');
 
-    // Fetch profile — with retry in case trigger hasn't run yet
+    // Fetch or create profile
     let profile = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      if (p) { profile = p; break; }
-      await new Promise(r => setTimeout(r, 600)); // wait 600ms and retry
-    }
 
-    // If still no profile, create it now
-    if (!profile) {
+    const { data: p, error: pe } = await supabase
+      .from('profiles').select('*').eq('id', user.id).single();
+
+    if (pe || !p) {
+      console.warn('[AUTH] Profile not found, creating it now…');
       await supabase.from('profiles').upsert({
         id:        user.id,
         full_name: user.user_metadata?.full_name || email.split('@')[0],
@@ -133,43 +151,44 @@ async function handleLogin() {
         role:      'student',
         is_active: true
       }, { onConflict: 'id' });
-      profile = { role: 'student' };
+      profile = { role: 'student', full_name: user.user_metadata?.full_name || 'User' };
+    } else {
+      profile = p;
     }
 
-    UI.showToast('Welcome back, ' + (profile.full_name || 'User').split(' ')[0] + '! 👋', 'success');
+    console.log('[AUTH] Profile:', profile);
+    UI.showToast('Welcome, ' + profile.full_name.split(' ')[0] + '! 👋', 'success');
     setTimeout(() => {
       window.location.href = profile.role === 'admin' ? 'admin/index.html' : 'dashboard.html';
     }, 700);
 
   } catch (e) {
-    console.error('Login error:', e);
-    UI.showToast(friendlyError(e.message), 'error', 6000);
+    console.error('[AUTH] Login error:', e);
+    UI.showToast(friendlyError(e.message), 'error', 7000);
     setLoading('login', false);
   }
 }
 
 // ─────────────────────────────────────────────
-// FRIENDLY ERROR MESSAGES
+// FRIENDLY ERRORS
 // ─────────────────────────────────────────────
 function friendlyError(msg) {
   if (!msg) return 'Something went wrong. Please try again.';
   const m = msg.toLowerCase();
   if (m.includes('invalid login credentials') || m.includes('invalid_credentials'))
-    return '❌ Incorrect email or password.';
+    return '❌ Wrong email or password.';
   if (m.includes('email not confirmed'))
-    return '📧 Please confirm your email first — check your inbox, then sign in.';
+    return '📧 Please confirm your email first — check your inbox. Or disable email confirmation in Supabase Auth settings.';
   if (m.includes('user already registered') || m.includes('already been registered'))
-    return '⚠️ This email is already registered. Please sign in instead.';
+    return '⚠️ Email already registered — please sign in instead.';
+  if (m.includes('signups not allowed') || m.includes('signup') && m.includes('disabled'))
+    return '⛔ Sign-ups are disabled. Go to Supabase → Authentication → Settings → turn ON "Enable sign-ups".';
   if (m.includes('password should be') || m.includes('weak_password'))
-    return '⚠️ Password must be at least 6 characters.';
-  if (m.includes('unable to validate email') || m.includes('invalid email'))
-    return '⚠️ Please enter a valid email address.';
+    return '⚠️ Password too weak — use at least 6 characters.';
+  if (m.includes('rate limit') || m.includes('too many requests') || m.includes('429'))
+    return '⏳ Too many attempts. Wait 60 seconds and try again.';
   if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed'))
-    return '🌐 Network error — check your internet connection.';
-  if (m.includes('rate limit') || m.includes('too many'))
-    return '⏳ Too many attempts. Please wait a minute and try again.';
-  if (m.includes('signup disabled') || m.includes('signups not allowed'))
-    return '⛔ Sign-ups are disabled on this Supabase project. Enable them in Authentication → Settings.';
+    return '🌐 Network error — check your internet or Supabase project status.';
   return msg;
 }
 
@@ -180,18 +199,19 @@ function friendlyError(msg) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
+    console.log('[AUTH] Existing session found, fetching profile…');
     const { data: profile } = await supabase
       .from('profiles').select('role').eq('id', session.user.id).single();
     if (profile) {
       window.location.href = profile.role === 'admin' ? 'admin/index.html' : 'dashboard.html';
     }
   } catch (e) {
-    console.warn('Session check:', e.message);
+    console.warn('[AUTH] Session check failed:', e.message);
   }
 })();
 
 // ─────────────────────────────────────────────
-// ENTER KEY SUPPORT
+// ENTER KEY
 // ─────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analytics — Admin NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center text-white font-black text-sm">A</div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-red-400 text-xs font-semibold">Admin Panel</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="index.html" class="sidebar-link">📊 Overview</a>
+        <a href="users.html" class="sidebar-link">👥 Users</a>
+        <a href="series.html" class="sidebar-link">📝 Test Series</a>
+        <a href="questions.html" class="sidebar-link">❓ Questions</a>
+        <a href="analytics.html" class="sidebar-link active">📈 Analytics</a>
+        <a href="notifications.html" class="sidebar-link">🔔 Notifications</a>
+        <a href="settings.html" class="sidebar-link">⚙️ Settings</a>
+        <a href="seed.html" class="sidebar-link">🌱 Seed Data</a>
+        <div class="pt-4 border-t border-slate-800 mt-4"><a href="../dashboard.html" class="sidebar-link text-slate-400">← Student View</a></div>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-medium text-left">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100 mr-3">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">Advanced Analytics</h2>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <div id="analytics-content">
+        <div class="flex items-center justify-center py-24">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="../js/config.js"></script>
+  <script>
+    async function init() {
+      const result = await Auth.requireAdmin();
+      if (!result) return;
+
+      const [{ data: attempts }, { data: series }, { data: users }] = await Promise.all([
+        supabase.from('test_attempts').select('*').eq('status', 'completed').order('created_at'),
+        supabase.from('test_series').select('*').order('series_number'),
+        supabase.from('profiles').select('*').eq('role', 'student')
+      ]);
+
+      renderAnalytics(attempts || [], series || [], users || []);
+    }
+
+    function renderAnalytics(attempts, series, users) {
+      const totalAttempts = attempts.length;
+      const passed = attempts.filter(a => a.is_passed).length;
+      const avgScore = totalAttempts ? (attempts.reduce((s, a) => s + (a.score_percentage || 0), 0) / totalAttempts).toFixed(1) : 0;
+      const avgTime = totalAttempts ? Math.round(attempts.reduce((s, a) => s + (a.time_taken_seconds || 0), 0) / totalAttempts) : 0;
+
+      // Series attempt counts
+      const seriesMap = {};
+      attempts.forEach(a => { seriesMap[a.series_id] = (seriesMap[a.series_id] || 0) + 1; });
+      const popularSeries = series.map(s => ({ ...s, count: seriesMap[s.id] || 0 })).sort((a, b) => b.count - a.count).slice(0, 8);
+
+      // Score distribution buckets
+      const buckets = { '0-40': 0, '41-60': 0, '61-70': 0, '71-80': 0, '81-90': 0, '91-100': 0 };
+      attempts.forEach(a => {
+        const s = a.score_percentage || 0;
+        if (s <= 40) buckets['0-40']++;
+        else if (s <= 60) buckets['41-60']++;
+        else if (s <= 70) buckets['61-70']++;
+        else if (s <= 80) buckets['71-80']++;
+        else if (s <= 90) buckets['81-90']++;
+        else buckets['91-100']++;
+      });
+
+      document.getElementById('analytics-content').innerHTML = `
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          ${[
+            { label: 'Total Attempts', value: totalAttempts, icon: '📝' },
+            { label: 'Pass Rate', value: totalAttempts ? ((passed / totalAttempts) * 100).toFixed(1) + '%' : '—', icon: '✅' },
+            { label: 'Avg Score', value: avgScore + '%', icon: '🎯' },
+            { label: 'Avg Time', value: UI.formatDuration(avgTime), icon: '⏱️' }
+          ].map(k => `
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <p class="text-2xl mb-2">${k.icon}</p>
+            <p class="text-2xl font-black text-slate-800">${k.value}</p>
+            <p class="text-xs text-slate-500 mt-0.5">${k.label}</p>
+          </div>`).join('')}
+        </div>
+
+        <!-- Charts -->
+        <div class="grid lg:grid-cols-2 gap-6 mb-8">
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 class="font-bold text-slate-800 mb-4">Score Distribution</h3>
+            <canvas id="score-dist-chart" height="220"></canvas>
+          </div>
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 class="font-bold text-slate-800 mb-4">Most Attempted Series</h3>
+            <canvas id="popular-chart" height="220"></canvas>
+          </div>
+        </div>
+
+        <!-- Per-series table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100"><h3 class="font-bold text-slate-800">Series Performance Report</h3></div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Series</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Attempts</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Avg Score</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Pass Rate</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Unique Students</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                ${series.map(s => {
+                  const sa = attempts.filter(a => a.series_id === s.id);
+                  const avg = sa.length ? (sa.reduce((sum, a) => sum + (a.score_percentage || 0), 0) / sa.length).toFixed(1) : '—';
+                  const pr = sa.length ? ((sa.filter(a => a.is_passed).length / sa.length) * 100).toFixed(0) + '%' : '—';
+                  const uniq = new Set(sa.map(a => a.user_id)).size;
+                  return `<tr class="hover:bg-slate-50">
+                    <td class="px-6 py-3 font-medium text-slate-800">Series ${s.series_number}: ${s.title}</td>
+                    <td class="px-4 py-3 text-center text-slate-600">${sa.length}</td>
+                    <td class="px-4 py-3 text-center font-bold ${avg !== '—' ? UI.scoreColor(parseFloat(avg)) : 'text-slate-400'}">${avg}${avg !== '—' ? '%' : ''}</td>
+                    <td class="px-4 py-3 text-center text-slate-600">${pr}</td>
+                    <td class="px-4 py-3 text-center text-slate-600">${uniq}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+
+      // Score distribution chart
+      new Chart(document.getElementById('score-dist-chart').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(buckets),
+          datasets: [{ label: 'Students', data: Object.values(buckets), backgroundColor: ['#ef4444','#f97316','#f59e0b','#84cc16','#22c55e','#10b981'], borderRadius: 6 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+
+      new Chart(document.getElementById('popular-chart').getContext('2d'), {
+        type: 'horizontalBar',
+        type: 'bar',
+        data: {
+          labels: popularSeries.map(s => `S${s.series_number}`),
+          datasets: [{ label: 'Attempts', data: popularSeries.map(s => s.count), backgroundColor: '#6366f1', borderRadius: 4 }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = '../index.html'; }
+    init();
+  </script>
+</body>
+</html>

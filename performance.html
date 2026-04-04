@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Performance — NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0"><svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-slate-500 text-xs">Student Portal</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+        <a href="tests.html" class="sidebar-link">📝 Test Series</a>
+        <a href="history.html" class="sidebar-link">🕐 My History</a>
+        <a href="performance.html" class="sidebar-link active">📊 Performance</a>
+        <a href="bookmarks.html" class="sidebar-link">🔖 Bookmarks</a>
+        <a href="profile.html" class="sidebar-link">👤 Profile</a>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">Performance Analysis</h2>
+      <div></div>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <div id="perf-content">
+        <div class="flex items-center justify-center py-24">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="js/config.js"></script>
+  <script>
+    let currentUser = null;
+
+    async function init() {
+      const session = await Auth.requireAuth();
+      if (!session) return;
+      currentUser = session.user;
+
+      const [attempts, series] = await Promise.all([
+        DB.getUserAttempts(currentUser.id),
+        DB.getTestSeries(true)
+      ]);
+
+      renderPerformance(attempts, series);
+    }
+
+    function renderPerformance(attempts, series) {
+      const completed = attempts.filter(a => a.status === 'completed');
+      if (!completed.length) {
+        document.getElementById('perf-content').innerHTML = `
+          <div class="text-center py-24">
+            <p class="text-5xl mb-4">📊</p>
+            <p class="text-slate-500 font-medium">No completed tests yet.</p>
+            <a href="tests.html" class="inline-block mt-4 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold">Start a Test</a>
+          </div>`;
+        return;
+      }
+
+      const avgScore = (completed.reduce((s, a) => s + (a.score_percentage || 0), 0) / completed.length).toFixed(1);
+      const bestScore = Math.max(...completed.map(a => a.score_percentage || 0)).toFixed(1);
+      const passRate = ((completed.filter(a => a.is_passed).length / completed.length) * 100).toFixed(1);
+      const totalCorrect = completed.reduce((s, a) => s + (a.correct_answers || 0), 0);
+      const totalQ = completed.reduce((s, a) => s + (a.total_questions || 0), 0);
+      const accuracy = totalQ ? ((totalCorrect / totalQ) * 100).toFixed(1) : 0;
+
+      // Series performance map
+      const seriesMap = {};
+      for (const a of completed) {
+        if (!seriesMap[a.series_id]) seriesMap[a.series_id] = [];
+        seriesMap[a.series_id].push(a);
+      }
+
+      document.getElementById('perf-content').innerHTML = `
+        <!-- KPI Row -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          ${[
+            { label: 'Avg Score', value: avgScore + '%', icon: '📈', color: 'indigo' },
+            { label: 'Best Score', value: bestScore + '%', icon: '🏆', color: 'yellow' },
+            { label: 'Pass Rate', value: passRate + '%', icon: '✅', color: 'green' },
+            { label: 'Accuracy', value: accuracy + '%', icon: '🎯', color: 'purple' }
+          ].map(k => `
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <p class="text-2xl mb-2">${k.icon}</p>
+            <p class="text-2xl font-black text-slate-800">${k.value}</p>
+            <p class="text-xs text-slate-500 mt-0.5">${k.label}</p>
+          </div>`).join('')}
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid lg:grid-cols-2 gap-6 mb-8">
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 class="font-bold text-slate-800 mb-4">Score Trend (Last 15 Tests)</h3>
+            <canvas id="trend-chart" height="220"></canvas>
+          </div>
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 class="font-bold text-slate-800 mb-4">Answer Distribution</h3>
+            <canvas id="dist-chart" height="220"></canvas>
+          </div>
+        </div>
+
+        <!-- Per-Series Breakdown -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100">
+            <h3 class="font-bold text-slate-800">Series-wise Performance</h3>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Series</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Attempts</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Best Score</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Avg Score</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100" id="series-tbody"></tbody>
+            </table>
+          </div>
+        </div>`;
+
+      // Trend chart
+      const last15 = completed.slice(0, 15).reverse();
+      new Chart(document.getElementById('trend-chart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: last15.map((_, i) => `Test ${i + 1}`),
+          datasets: [
+            {
+              label: 'Score %',
+              data: last15.map(a => a.score_percentage),
+              borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', borderWidth: 2.5, pointRadius: 4, fill: true, tension: 0.4
+            },
+            {
+              label: 'Pass Line',
+              data: last15.map(() => 70),
+              borderColor: '#ef4444', borderWidth: 1.5, borderDash: [5, 5], pointRadius: 0
+            }
+          ]
+        },
+        options: { responsive: true, plugins: { legend: { display: true } }, scales: { y: { min: 0, max: 100 } } }
+      });
+
+      // Distribution donut
+      const totalWrong = completed.reduce((s, a) => s + (a.wrong_answers || 0), 0);
+      const totalSkipped = completed.reduce((s, a) => s + (a.skipped_answers || 0), 0);
+      new Chart(document.getElementById('dist-chart').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: ['Correct', 'Wrong', 'Skipped'], datasets: [{ data: [totalCorrect, totalWrong, totalSkipped], backgroundColor: ['#22c55e', '#ef4444', '#f59e0b'], borderWidth: 0 }] },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } }, cutout: '65%' }
+      });
+
+      // Per-series table
+      const tbody = document.getElementById('series-tbody');
+      const seriesRows = Object.entries(seriesMap).map(([sid, atts]) => {
+        const seriesInfo = atts[0].test_series;
+        const best = Math.max(...atts.map(a => a.score_percentage || 0)).toFixed(1);
+        const avg = (atts.reduce((s, a) => s + (a.score_percentage || 0), 0) / atts.length).toFixed(1);
+        const passed = atts.some(a => a.is_passed);
+        return { title: seriesInfo?.title || '—', count: atts.length, best, avg, passed };
+      });
+      tbody.innerHTML = seriesRows.map(r => `
+        <tr class="hover:bg-slate-50 transition-colors">
+          <td class="px-6 py-3.5 font-medium text-slate-800">${r.title}</td>
+          <td class="px-4 py-3.5 text-center text-slate-600">${r.count}</td>
+          <td class="px-4 py-3.5 text-center font-bold ${UI.scoreColor(parseFloat(r.best))}">${r.best}%</td>
+          <td class="px-4 py-3.5 text-center ${UI.scoreColor(parseFloat(r.avg))}">${r.avg}%</td>
+          <td class="px-4 py-3.5 text-center">
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium ${r.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${r.passed ? 'Passed' : 'Not Passed'}</span>
+          </td>
+        </tr>`).join('');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = 'index.html'; }
+    init();
+  </script>
+</body>
+</html>

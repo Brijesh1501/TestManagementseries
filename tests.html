@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Series — NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-slate-500 text-xs">Student Portal</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+        <a href="dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+        <a href="tests.html" class="sidebar-link active">📝 Test Series</a>
+        <a href="history.html" class="sidebar-link">🕐 My History</a>
+        <a href="performance.html" class="sidebar-link">📊 Performance</a>
+        <a href="bookmarks.html" class="sidebar-link">🔖 Bookmarks</a>
+        <a href="profile.html" class="sidebar-link">👤 Profile</a>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100">☰</button>
+      <div>
+        <h2 class="text-lg font-bold text-slate-800">Test Series</h2>
+        <p class="text-xs text-slate-500">Choose a series and start practicing</p>
+      </div>
+      <div class="flex gap-2">
+        <input id="search-input" type="text" placeholder="Search series…" oninput="filterSeries()" class="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 w-40 lg:w-56" />
+      </div>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <!-- Filter bar -->
+      <div class="flex flex-wrap gap-2 mb-6">
+        <button onclick="setFilter('all')" id="filter-all" class="filter-btn active-filter">All Series</button>
+        <button onclick="setFilter('not-attempted')" id="filter-not-attempted" class="filter-btn">Not Attempted</button>
+        <button onclick="setFilter('attempted')" id="filter-attempted" class="filter-btn">Attempted</button>
+        <button onclick="setFilter('passed')" id="filter-passed" class="filter-btn">Passed</button>
+      </div>
+
+      <div id="series-grid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div class="col-span-full flex items-center justify-center py-16">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="js/config.js"></script>
+  <script>
+    let allSeries = [], userAttempts = [], activeFilter = 'all', currentUser = null;
+
+    async function init() {
+      const session = await Auth.requireAuth();
+      if (!session) return;
+      currentUser = session.user;
+      [allSeries, userAttempts] = await Promise.all([DB.getTestSeries(true), DB.getUserAttempts(currentUser.id)]);
+      renderSeries();
+    }
+
+    function getBestAttempt(seriesId) {
+      const attempts = userAttempts.filter(a => a.series_id === seriesId && a.status === 'completed');
+      if (!attempts.length) return null;
+      return attempts.reduce((best, a) => (!best || a.score_percentage > best.score_percentage) ? a : best, null);
+    }
+
+    function setFilter(f) {
+      activeFilter = f;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active-filter'));
+      document.getElementById('filter-' + f).classList.add('active-filter');
+      renderSeries();
+    }
+
+    function filterSeries() { renderSeries(); }
+
+    function renderSeries() {
+      const search = document.getElementById('search-input').value.toLowerCase();
+      let filtered = allSeries.filter(s => s.title.toLowerCase().includes(search) || String(s.series_number).includes(search));
+
+      if (activeFilter === 'not-attempted') filtered = filtered.filter(s => !userAttempts.find(a => a.series_id === s.id));
+      if (activeFilter === 'attempted') filtered = filtered.filter(s => userAttempts.find(a => a.series_id === s.id));
+      if (activeFilter === 'passed') filtered = filtered.filter(s => {
+        const best = getBestAttempt(s.id);
+        return best && best.is_passed;
+      });
+
+      const grid = document.getElementById('series-grid');
+      if (!filtered.length) {
+        grid.innerHTML = '<div class="col-span-full text-center py-16 text-slate-400">No series found.</div>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(s => {
+        const best = getBestAttempt(s.id);
+        const attempts = userAttempts.filter(a => a.series_id === s.id);
+        const diffColors = { Easy: 'bg-green-100 text-green-700', Medium: 'bg-yellow-100 text-yellow-700', Hard: 'bg-red-100 text-red-700' };
+
+        return `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden group">
+          <div class="p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center font-bold text-indigo-700 text-sm">${s.series_number}</div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium ${diffColors[s.difficulty] || diffColors.Medium}">${s.difficulty}</span>
+            </div>
+            <h3 class="font-bold text-slate-800 text-sm mb-1">${s.title}</h3>
+            <p class="text-xs text-slate-500 mb-4 line-clamp-2">${s.description || 'Practice NCLEX RN questions'}</p>
+            <div class="grid grid-cols-3 gap-2 text-center mb-4">
+              <div class="bg-slate-50 rounded-xl p-2">
+                <p class="text-sm font-bold text-slate-800">${s.total_questions}</p>
+                <p class="text-xs text-slate-400">Questions</p>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-2">
+                <p class="text-sm font-bold text-slate-800">${s.duration_minutes}m</p>
+                <p class="text-xs text-slate-400">Duration</p>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-2">
+                <p class="text-sm font-bold text-slate-800">${s.passing_score}%</p>
+                <p class="text-xs text-slate-400">Pass Mark</p>
+              </div>
+            </div>
+            ${best ? `
+              <div class="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 mb-4">
+                <span class="text-xs text-slate-500">Best Score</span>
+                <span class="text-sm font-bold ${UI.scoreColor(best.score_percentage)}">${best.score_percentage.toFixed(1)}%
+                  <span class="text-xs px-1.5 py-0.5 rounded-full ml-1 ${best.is_passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${best.is_passed ? 'Pass' : 'Fail'}</span>
+                </span>
+              </div>` : ''}
+          </div>
+          <div class="border-t border-slate-100 px-5 py-3 flex items-center justify-between bg-slate-50/50">
+            <span class="text-xs text-slate-400">${attempts.length} attempt${attempts.length !== 1 ? 's' : ''}</span>
+            <a href="test.html?series=${s.id}" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors">
+              ${best ? 'Retake Test' : 'Start Test'}
+            </a>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = 'index.html'; }
+    init();
+  </script>
+</body>
+</html>

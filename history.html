@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My History — NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0"><svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-slate-500 text-xs">Student Portal</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+        <a href="tests.html" class="sidebar-link">📝 Test Series</a>
+        <a href="history.html" class="sidebar-link active">🕐 My History</a>
+        <a href="performance.html" class="sidebar-link">📊 Performance</a>
+        <a href="bookmarks.html" class="sidebar-link">🔖 Bookmarks</a>
+        <a href="profile.html" class="sidebar-link">👤 Profile</a>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">My Test History</h2>
+      <div class="flex gap-2 items-center">
+        <select id="filter-status" onchange="applyFilters()" class="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          <option value="all">All Status</option>
+          <option value="completed">Completed</option>
+          <option value="in_progress">In Progress</option>
+        </select>
+        <select id="filter-result" onchange="applyFilters()" class="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          <option value="all">All Results</option>
+          <option value="passed">Passed</option>
+          <option value="failed">Failed</option>
+        </select>
+      </div>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <div id="history-container">
+        <div class="flex items-center justify-center py-24">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="js/config.js"></script>
+  <script>
+    let allAttempts = [];
+    let currentUser = null;
+
+    async function init() {
+      const session = await Auth.requireAuth();
+      if (!session) return;
+      currentUser = session.user;
+      allAttempts = await DB.getUserAttempts(currentUser.id);
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const status = document.getElementById('filter-status').value;
+      const result = document.getElementById('filter-result').value;
+
+      let filtered = [...allAttempts];
+      if (status !== 'all') filtered = filtered.filter(a => a.status === status);
+      if (result === 'passed') filtered = filtered.filter(a => a.is_passed === true);
+      if (result === 'failed') filtered = filtered.filter(a => a.is_passed === false && a.status === 'completed');
+
+      renderHistory(filtered);
+    }
+
+    function renderHistory(attempts) {
+      const container = document.getElementById('history-container');
+      if (!attempts.length) {
+        container.innerHTML = `<div class="text-center py-24"><p class="text-5xl mb-4">📭</p><p class="text-slate-500">No test history found.</p><a href="tests.html" class="inline-block mt-4 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold">Start a Test</a></div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-3 border-b border-slate-100 bg-slate-50 grid grid-cols-12 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <div class="col-span-4">Series</div>
+            <div class="col-span-2 text-center">Date</div>
+            <div class="col-span-2 text-center">Time</div>
+            <div class="col-span-1 text-center">Score</div>
+            <div class="col-span-1 text-center">Result</div>
+            <div class="col-span-2 text-center">Action</div>
+          </div>
+          <div class="divide-y divide-slate-100">
+            ${attempts.map(a => `
+            <div class="grid grid-cols-12 items-center px-6 py-4 hover:bg-slate-50 transition-colors">
+              <div class="col-span-4">
+                <p class="text-sm font-semibold text-slate-800">${a.test_series?.title || '—'}</p>
+                <p class="text-xs text-slate-400 mt-0.5">${a.total_questions} questions</p>
+              </div>
+              <div class="col-span-2 text-center text-xs text-slate-500">${UI.formatDate(a.created_at)}</div>
+              <div class="col-span-2 text-center text-xs text-slate-500">${UI.formatDuration(a.time_taken_seconds)}</div>
+              <div class="col-span-1 text-center">
+                ${a.score_percentage != null ? `<span class="text-sm font-bold ${UI.scoreColor(a.score_percentage)}">${a.score_percentage.toFixed(1)}%</span>` : '<span class="text-xs text-slate-400">—</span>'}
+              </div>
+              <div class="col-span-1 text-center">
+                ${a.status === 'completed'
+                  ? `<span class="text-xs px-2 py-0.5 rounded-full font-medium ${a.is_passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${a.is_passed ? 'Pass' : 'Fail'}</span>`
+                  : `<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium">In Progress</span>`}
+              </div>
+              <div class="col-span-2 text-center flex items-center justify-center gap-2">
+                ${a.status === 'completed'
+                  ? `<a href="result.html?attempt=${a.id}" class="text-xs px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg font-medium transition-colors">Review</a>`
+                  : `<a href="test.html?series=${a.series_id}" class="text-xs px-3 py-1.5 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-lg font-medium transition-colors">Continue</a>`}
+                <a href="test.html?series=${a.series_id}" class="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-medium transition-colors">Retake</a>
+              </div>
+            </div>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = 'index.html'; }
+    init();
+  </script>
+</body>
+</html>

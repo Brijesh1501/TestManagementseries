@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seed Data — Admin NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center text-white font-black text-sm">A</div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-red-400 text-xs font-semibold">Admin Panel</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="index.html" class="sidebar-link">📊 Overview</a>
+        <a href="users.html" class="sidebar-link">👥 Users</a>
+        <a href="series.html" class="sidebar-link">📝 Test Series</a>
+        <a href="questions.html" class="sidebar-link">❓ Questions</a>
+        <a href="analytics.html" class="sidebar-link">📈 Analytics</a>
+        <a href="notifications.html" class="sidebar-link">🔔 Notifications</a>
+        <a href="settings.html" class="sidebar-link">⚙️ Settings</a>
+        <a href="seed.html" class="sidebar-link active">🌱 Seed Data</a>
+        <div class="pt-4 border-t border-slate-800 mt-4"><a href="../dashboard.html" class="sidebar-link text-slate-400">← Student View</a></div>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-medium text-left">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100 mr-3">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">Seed Data</h2>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8 max-w-2xl">
+      <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6">
+        <h3 class="font-bold text-amber-800 mb-1">⚠️ Important</h3>
+        <p class="text-sm text-amber-700">This will populate the database with <strong>25 test series and 842 NCLEX RN questions</strong> from the uploaded PDF. Run this only once. If data already exists, it will be updated (upserted) safely.</p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+        <h3 class="font-bold text-slate-800 mb-2">Database Status</h3>
+        <div id="db-status" class="space-y-2 text-sm text-slate-600 mb-4">
+          <div class="flex items-center gap-2"><div class="w-5 h-5 border-2 border-slate-200 border-t-indigo-400 rounded-full animate-spin"></div> Checking...</div>
+        </div>
+        <button onclick="checkStatus()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium">Refresh Status</button>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 class="font-bold text-slate-800 mb-2">Seed Questions Data</h3>
+        <p class="text-sm text-slate-500 mb-5">Populates Supabase with all 25 series and 842 questions from the NCLEX RN PDF.</p>
+        <button id="seed-btn" onclick="runSeed()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors">
+          🌱 Run Seed (25 Series · 842 Questions)
+        </button>
+        <div id="seed-progress" class="hidden mt-4">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+            <span class="text-sm text-slate-600" id="seed-status">Starting...</span>
+          </div>
+          <div class="w-full bg-slate-200 rounded-full h-2">
+            <div id="seed-progress-bar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width:0%"></div>
+          </div>
+        </div>
+        <div id="seed-log" class="mt-4 bg-slate-900 text-green-400 font-mono text-xs p-4 rounded-xl max-h-48 overflow-y-auto hidden"></div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/seed-data.js"></script>
+  <script>
+    async function init() {
+      const result = await Auth.requireAdmin();
+      if (!result) return;
+      await checkStatus();
+    }
+
+    async function checkStatus() {
+      const [{ count: s }, { count: q }, { count: a }] = await Promise.all([
+        supabase.from('test_series').select('*', { count: 'exact', head: true }),
+        supabase.from('questions').select('*', { count: 'exact', head: true }),
+        supabase.from('test_attempts').select('*', { count: 'exact', head: true })
+      ]);
+      document.getElementById('db-status').innerHTML = `
+        <div class="flex items-center justify-between py-2 border-b border-slate-100"><span>Test Series</span><span class="font-bold text-slate-800">${s ?? 0}</span></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100"><span>Questions</span><span class="font-bold text-slate-800">${q ?? 0}</span></div>
+        <div class="flex items-center justify-between py-2"><span>Test Attempts</span><span class="font-bold text-slate-800">${a ?? 0}</span></div>`;
+    }
+
+    async function runSeed() {
+      const btn = document.getElementById('seed-btn');
+      const log = document.getElementById('seed-log');
+      const progress = document.getElementById('seed-progress');
+      const progressBar = document.getElementById('seed-progress-bar');
+      const status = document.getElementById('seed-status');
+
+      btn.disabled = true;
+      btn.textContent = 'Seeding...';
+      log.classList.remove('hidden');
+      progress.classList.remove('hidden');
+      log.innerHTML = '';
+
+      const addLog = (msg) => {
+        log.innerHTML += msg + '\n';
+        log.scrollTop = log.scrollHeight;
+      };
+
+      addLog('🚀 Starting seed process...');
+      addLog(`📦 ${QUESTIONS_DATA.length} series to insert`);
+
+      try {
+        for (let i = 0; i < QUESTIONS_DATA.length; i++) {
+          const series = QUESTIONS_DATA[i];
+          status.textContent = `Seeding Series ${series.series_number} of ${QUESTIONS_DATA.length}...`;
+          progressBar.style.width = ((i / QUESTIONS_DATA.length) * 100) + '%';
+
+          const { data: s, error: se } = await supabase
+            .from('test_series')
+            .upsert({
+              title: series.title,
+              series_number: series.series_number,
+              description: `NCLEX RN Practice Test Series ${series.series_number} — ${series.questions.length} questions.`,
+              duration_minutes: 60,
+              total_questions: series.questions.length,
+              passing_score: 70,
+              category: 'NCLEX RN',
+              difficulty: 'Medium',
+              is_active: true
+            }, { onConflict: 'series_number' })
+            .select().single();
+
+          if (se) { addLog(`❌ Series ${series.series_number}: ${se.message}`); continue; }
+
+          const questionsToInsert = series.questions.map((q, idx) => ({
+            series_id: s.id,
+            question_number: idx + 1,
+            question_text: q.question,
+            option_a: q.option_a,
+            option_b: q.option_b,
+            option_c: q.option_c,
+            option_d: q.option_d,
+            correct_answer: q.correct_answer
+          }));
+
+          for (let j = 0; j < questionsToInsert.length; j += 50) {
+            const batch = questionsToInsert.slice(j, j + 50);
+            const { error: qe } = await supabase.from('questions').upsert(batch, { onConflict: 'series_id,question_number' });
+            if (qe) addLog(`⚠️ Q batch error: ${qe.message}`);
+          }
+          addLog(`✅ Series ${series.series_number}: "${series.title}" — ${series.questions.length} questions`);
+        }
+
+        progressBar.style.width = '100%';
+        status.textContent = 'Complete!';
+        addLog('\n🎉 Seed complete! All series and questions inserted.');
+        await checkStatus();
+        UI.showToast('Seed completed successfully!', 'success');
+      } catch (e) {
+        addLog('❌ Fatal error: ' + e.message);
+        console.error(e);
+      }
+
+      btn.disabled = false;
+      btn.textContent = '🌱 Run Seed Again';
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = '../index.html'; }
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile — NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0"><svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-slate-500 text-xs">Student Portal</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+        <a href="tests.html" class="sidebar-link">📝 Test Series</a>
+        <a href="history.html" class="sidebar-link">🕐 My History</a>
+        <a href="performance.html" class="sidebar-link">📊 Performance</a>
+        <a href="bookmarks.html" class="sidebar-link">🔖 Bookmarks</a>
+        <a href="profile.html" class="sidebar-link active">👤 Profile</a>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium text-left">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100 mr-3">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">My Profile</h2>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8 max-w-2xl">
+      <div id="profile-content">
+        <div class="flex items-center justify-center py-24">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="js/config.js"></script>
+  <script>
+    let currentUser = null, profile = null;
+
+    async function init() {
+      const session = await Auth.requireAuth();
+      if (!session) return;
+      currentUser = session.user;
+      profile = await Auth.getProfile(currentUser.id);
+      renderProfile();
+    }
+
+    function renderProfile() {
+      document.getElementById('profile-content').innerHTML = `
+        <!-- Avatar + Name -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6 flex items-center gap-5">
+          <div class="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl font-black flex-shrink-0">
+            ${profile.full_name[0].toUpperCase()}
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-slate-800">${profile.full_name}</h2>
+            <p class="text-slate-500 text-sm">${profile.email}</p>
+            <span class="inline-block mt-1 text-xs bg-indigo-100 text-indigo-700 font-bold px-2.5 py-0.5 rounded-full capitalize">${profile.role}</span>
+          </div>
+        </div>
+
+        <!-- Edit Profile -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+          <h3 class="font-bold text-slate-800 mb-5">Edit Profile</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">Full Name</label>
+              <input id="edit-name" type="text" value="${profile.full_name}" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">Email (read-only)</label>
+              <input type="email" value="${profile.email}" disabled class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-400 cursor-not-allowed" />
+            </div>
+            <button onclick="saveProfile()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition-colors">
+              Save Changes
+            </button>
+          </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+          <h3 class="font-bold text-slate-800 mb-5">Change Password</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">New Password</label>
+              <input id="new-pw" type="password" placeholder="Min 8 characters" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">Confirm New Password</label>
+              <input id="confirm-pw" type="password" placeholder="Repeat password" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <button onclick="changePassword()" class="px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl text-sm transition-colors">
+              Update Password
+            </button>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="bg-white rounded-2xl border border-red-200 shadow-sm p-6">
+          <h3 class="font-bold text-red-600 mb-2">Danger Zone</h3>
+          <p class="text-sm text-slate-500 mb-4">Signing out will end your current session on this device.</p>
+          <button onclick="handleLogout()" class="px-5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-semibold rounded-xl text-sm transition-colors border border-red-200">
+            Sign Out
+          </button>
+        </div>`;
+    }
+
+    async function saveProfile() {
+      const name = document.getElementById('edit-name').value.trim();
+      if (!name) return UI.showToast('Name cannot be empty.', 'warning');
+      const { error } = await supabase.from('profiles').update({ full_name: name }).eq('id', currentUser.id);
+      if (error) return UI.showToast(error.message, 'error');
+      profile.full_name = name;
+      UI.showToast('Profile updated!', 'success');
+      renderProfile();
+    }
+
+    async function changePassword() {
+      const pw = document.getElementById('new-pw').value;
+      const confirm = document.getElementById('confirm-pw').value;
+      if (!pw || pw.length < 8) return UI.showToast('Password must be at least 8 characters.', 'warning');
+      if (pw !== confirm) return UI.showToast('Passwords do not match.', 'warning');
+      const { error } = await supabase.auth.updateUser({ password: pw });
+      if (error) return UI.showToast(error.message, 'error');
+      UI.showToast('Password updated successfully!', 'success');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = 'index.html'; }
+    init();
+  </script>
+</body>
+</html>

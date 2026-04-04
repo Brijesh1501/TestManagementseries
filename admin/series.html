@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Series — Admin NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center text-white font-black text-sm">A</div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-red-400 text-xs font-semibold">Admin Panel</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="index.html" class="sidebar-link">📊 Overview</a>
+        <a href="users.html" class="sidebar-link">👥 Users</a>
+        <a href="series.html" class="sidebar-link active">📝 Test Series</a>
+        <a href="questions.html" class="sidebar-link">❓ Questions</a>
+        <a href="analytics.html" class="sidebar-link">📈 Analytics</a>
+        <a href="notifications.html" class="sidebar-link">🔔 Notifications</a>
+        <a href="settings.html" class="sidebar-link">⚙️ Settings</a>
+        <a href="seed.html" class="sidebar-link">🌱 Seed Data</a>
+        <div class="pt-4 border-t border-slate-800 mt-4">
+          <a href="../dashboard.html" class="sidebar-link text-slate-400">← Student View</a>
+        </div>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-medium text-left">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">Test Series Management</h2>
+      <button onclick="openCreateModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors">+ New Series</button>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <div id="series-container">
+        <div class="flex items-center justify-center py-24">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <!-- Series Modal -->
+  <div id="series-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-screen overflow-y-auto">
+      <h3 class="text-lg font-bold text-slate-800 mb-5" id="modal-title">Create Test Series</h3>
+      <input type="hidden" id="modal-id" />
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">Title *</label>
+            <input id="modal-series-title" type="text" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" placeholder="Series title" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">Series No. *</label>
+            <input id="modal-series-number" type="number" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" min="1" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1.5">Description</label>
+          <textarea id="modal-desc" rows="2" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" placeholder="Optional description"></textarea>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">Duration (min) *</label>
+            <input id="modal-duration" type="number" min="5" max="300" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">Passing % *</label>
+            <input id="modal-passing" type="number" min="1" max="100" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">Difficulty</label>
+            <select id="modal-diff" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              <option>Easy</option><option selected>Medium</option><option>Hard</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1.5">Category</label>
+          <input id="modal-category" type="text" value="NCLEX RN" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        </div>
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="modal-active" checked class="w-4 h-4 text-indigo-600 rounded" />
+          <label for="modal-active" class="text-sm font-medium text-slate-600">Active (visible to students)</label>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeModal()" class="flex-1 py-2.5 border border-slate-300 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 text-sm">Cancel</button>
+        <button onclick="saveSeries()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm">Save Series</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script>
+    let allSeries = [];
+
+    async function init() {
+      const result = await Auth.requireAdmin();
+      if (!result) return;
+      await loadSeries();
+    }
+
+    async function loadSeries() {
+      const { data, error } = await supabase
+        .from('test_series')
+        .select('*')
+        .order('series_number');
+      if (error) { UI.showToast(error.message, 'error'); return; }
+
+      // Get attempt counts
+      const { data: attempts } = await supabase.from('test_attempts').select('series_id');
+      const cntMap = {};
+      (attempts || []).forEach(a => { cntMap[a.series_id] = (cntMap[a.series_id] || 0) + 1; });
+
+      allSeries = (data || []).map(s => ({ ...s, attempt_count: cntMap[s.id] || 0 }));
+      renderSeries();
+    }
+
+    function renderSeries() {
+      const container = document.getElementById('series-container');
+      if (!allSeries.length) {
+        container.innerHTML = '<div class="text-center py-16"><p class="text-slate-400">No series yet. Click "New Series" to create one.</p></div>';
+        return;
+      }
+      container.innerHTML = `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-3 border-b border-slate-100 bg-slate-50 grid grid-cols-12 text-xs font-semibold text-slate-500 uppercase">
+            <div class="col-span-1">#</div>
+            <div class="col-span-3">Title</div>
+            <div class="col-span-1 text-center">Questions</div>
+            <div class="col-span-1 text-center">Duration</div>
+            <div class="col-span-1 text-center">Pass %</div>
+            <div class="col-span-1 text-center">Attempts</div>
+            <div class="col-span-1 text-center">Difficulty</div>
+            <div class="col-span-1 text-center">Status</div>
+            <div class="col-span-2 text-center">Actions</div>
+          </div>
+          <div class="divide-y divide-slate-100">
+            ${allSeries.map(s => `
+            <div class="grid grid-cols-12 items-center px-6 py-4 hover:bg-slate-50 transition-colors">
+              <div class="col-span-1 text-sm font-bold text-slate-400">${s.series_number}</div>
+              <div class="col-span-3">
+                <p class="text-sm font-semibold text-slate-800">${s.title}</p>
+                <p class="text-xs text-slate-400">${s.category}</p>
+              </div>
+              <div class="col-span-1 text-center text-sm text-slate-600">${s.total_questions}</div>
+              <div class="col-span-1 text-center text-sm text-slate-600">${s.duration_minutes}m</div>
+              <div class="col-span-1 text-center text-sm text-slate-600">${s.passing_score}%</div>
+              <div class="col-span-1 text-center text-sm text-slate-600">${s.attempt_count}</div>
+              <div class="col-span-1 text-center">
+                <span class="text-xs px-2 py-0.5 rounded-full font-medium ${s.difficulty === 'Easy' ? 'bg-green-100 text-green-700' : s.difficulty === 'Hard' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}">${s.difficulty}</span>
+              </div>
+              <div class="col-span-1 text-center">
+                <button onclick="toggleActive('${s.id}', ${s.is_active})" class="text-xs px-2 py-0.5 rounded-full font-medium ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">${s.is_active ? 'Active' : 'Hidden'}</button>
+              </div>
+              <div class="col-span-2 text-center flex items-center justify-center gap-2">
+                <button onclick='editSeries(${JSON.stringify(s)})' class="text-xs px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg font-medium">Edit</button>
+                <a href="questions.html?series=${s.id}" class="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-medium">Questions</a>
+                <button onclick="deleteSeries('${s.id}')" class="text-xs text-red-400 hover:text-red-600 font-medium">Del</button>
+              </div>
+            </div>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    function openCreateModal() {
+      document.getElementById('modal-title').textContent = 'Create Test Series';
+      document.getElementById('modal-id').value = '';
+      document.getElementById('modal-series-title').value = '';
+      document.getElementById('modal-series-number').value = (allSeries.length + 1);
+      document.getElementById('modal-desc').value = '';
+      document.getElementById('modal-duration').value = '60';
+      document.getElementById('modal-passing').value = '70';
+      document.getElementById('modal-diff').value = 'Medium';
+      document.getElementById('modal-category').value = 'NCLEX RN';
+      document.getElementById('modal-active').checked = true;
+      document.getElementById('series-modal').classList.remove('hidden');
+    }
+
+    function editSeries(s) {
+      document.getElementById('modal-title').textContent = 'Edit Test Series';
+      document.getElementById('modal-id').value = s.id;
+      document.getElementById('modal-series-title').value = s.title;
+      document.getElementById('modal-series-number').value = s.series_number;
+      document.getElementById('modal-desc').value = s.description || '';
+      document.getElementById('modal-duration').value = s.duration_minutes;
+      document.getElementById('modal-passing').value = s.passing_score;
+      document.getElementById('modal-diff').value = s.difficulty;
+      document.getElementById('modal-category').value = s.category;
+      document.getElementById('modal-active').checked = s.is_active;
+      document.getElementById('series-modal').classList.remove('hidden');
+    }
+
+    function closeModal() { document.getElementById('series-modal').classList.add('hidden'); }
+
+    async function saveSeries() {
+      const id = document.getElementById('modal-id').value;
+      const payload = {
+        title: document.getElementById('modal-series-title').value.trim(),
+        series_number: parseInt(document.getElementById('modal-series-number').value),
+        description: document.getElementById('modal-desc').value.trim(),
+        duration_minutes: parseInt(document.getElementById('modal-duration').value),
+        passing_score: parseInt(document.getElementById('modal-passing').value),
+        difficulty: document.getElementById('modal-diff').value,
+        category: document.getElementById('modal-category').value.trim(),
+        is_active: document.getElementById('modal-active').checked
+      };
+
+      if (!payload.title || !payload.series_number) return UI.showToast('Title and series number are required.', 'warning');
+
+      let error;
+      if (id) {
+        ({ error } = await supabase.from('test_series').update(payload).eq('id', id));
+      } else {
+        payload.total_questions = 0;
+        ({ error } = await supabase.from('test_series').insert(payload));
+      }
+      if (error) return UI.showToast(error.message, 'error');
+      UI.showToast(id ? 'Series updated!' : 'Series created!', 'success');
+      closeModal();
+      await loadSeries();
+    }
+
+    async function toggleActive(id, current) {
+      const { error } = await supabase.from('test_series').update({ is_active: !current }).eq('id', id);
+      if (error) return UI.showToast(error.message, 'error');
+      await loadSeries();
+    }
+
+    async function deleteSeries(id) {
+      if (!confirm('Delete this series and ALL its questions? This cannot be undone.')) return;
+      const { error } = await supabase.from('test_series').delete().eq('id', id);
+      if (error) return UI.showToast(error.message, 'error');
+      UI.showToast('Series deleted.', 'success');
+      await loadSeries();
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = '../index.html'; }
+    init();
+  </script>
+</body>
+</html>

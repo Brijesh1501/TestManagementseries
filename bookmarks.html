@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bookmarks — NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0"><svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-slate-500 text-xs">Student Portal</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+        <a href="tests.html" class="sidebar-link">📝 Test Series</a>
+        <a href="history.html" class="sidebar-link">🕐 My History</a>
+        <a href="performance.html" class="sidebar-link">📊 Performance</a>
+        <a href="bookmarks.html" class="sidebar-link active">🔖 Bookmarks</a>
+        <a href="profile.html" class="sidebar-link">👤 Profile</a>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium text-left">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">Bookmarked Questions</h2>
+      <span id="bm-count" class="text-xs bg-indigo-100 text-indigo-700 font-bold px-3 py-1 rounded-full"></span>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <div id="bm-container">
+        <div class="flex items-center justify-center py-24">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="js/config.js"></script>
+  <script>
+    let currentUser = null;
+
+    async function init() {
+      const session = await Auth.requireAuth();
+      if (!session) return;
+      currentUser = session.user;
+
+      const { data: bookmarks, error } = await supabase
+        .from('bookmarks')
+        .select('*, questions(*, test_series(title, series_number))')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (error) { console.error(error); return; }
+
+      document.getElementById('bm-count').textContent = bookmarks.length + ' saved';
+
+      const container = document.getElementById('bm-container');
+      if (!bookmarks.length) {
+        container.innerHTML = `<div class="text-center py-24"><p class="text-5xl mb-4">🔖</p><p class="text-slate-500 font-medium">No bookmarks yet.</p><p class="text-slate-400 text-sm mt-1">Star questions during a test to save them here.</p></div>`;
+        return;
+      }
+
+      container.innerHTML = `<div class="space-y-4">
+        ${bookmarks.map(b => {
+          const q = b.questions;
+          return `
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6" id="bm-${b.id}">
+            <div class="flex items-start justify-between mb-3">
+              <div>
+                <span class="text-xs bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-full">Series ${q.test_series?.series_number} · Q${q.question_number}</span>
+                <span class="text-xs text-slate-400 ml-2">${q.test_series?.title}</span>
+              </div>
+              <button onclick="removeBookmark('${b.id}', '${q.id}')" class="text-red-400 hover:text-red-600 transition-colors text-sm font-medium">Remove</button>
+            </div>
+            <p class="text-slate-800 font-medium mb-4 leading-relaxed">${q.question_text}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              ${['A','B','C','D'].map(opt => {
+                const text = q[`option_${opt.toLowerCase()}`];
+                const isCorrect = opt === q.correct_answer;
+                return `<div class="flex items-start gap-2 text-xs px-3 py-2 rounded-lg border ${isCorrect ? 'bg-green-50 border-green-300 text-green-700 font-semibold' : 'bg-slate-50 border-slate-200 text-slate-600'}">
+                  <span class="font-bold flex-shrink-0">${opt}.</span>
+                  <span>${text}</span>
+                  ${isCorrect ? '<span class="ml-auto text-green-600">✓</span>' : ''}
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    async function removeBookmark(bmId, questionId) {
+      await supabase.from('bookmarks').delete().eq('id', bmId);
+      document.getElementById('bm-' + bmId)?.remove();
+      UI.showToast('Bookmark removed', 'info', 1500);
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = 'index.html'; }
+    init();
+  </script>
+</body>
+</html>

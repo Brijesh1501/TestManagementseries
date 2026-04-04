@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Users — Admin NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center text-white font-black text-sm">A</div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-red-400 text-xs font-semibold">Admin Panel</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1">
+        <a href="index.html" class="sidebar-link">📊 Overview</a>
+        <a href="users.html" class="sidebar-link active">👥 Users</a>
+        <a href="series.html" class="sidebar-link">📝 Test Series</a>
+        <a href="questions.html" class="sidebar-link">❓ Questions</a>
+        <a href="analytics.html" class="sidebar-link">📈 Analytics</a>
+        <a href="notifications.html" class="sidebar-link">🔔 Notifications</a>
+        <a href="settings.html" class="sidebar-link">⚙️ Settings</a>
+        <a href="seed.html" class="sidebar-link">🌱 Seed Data</a>
+        <div class="pt-4 border-t border-slate-800 mt-4">
+          <a href="../dashboard.html" class="sidebar-link text-slate-400">← Student View</a>
+        </div>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-medium text-left">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100">☰</button>
+      <h2 class="text-lg font-bold text-slate-800">User Management</h2>
+      <div class="flex gap-2">
+        <input id="search" type="text" placeholder="Search users…" oninput="filterUsers()" class="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 w-40 lg:w-56" />
+        <select id="role-filter" onchange="filterUsers()" class="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none">
+          <option value="all">All Roles</option>
+          <option value="student">Students</option>
+          <option value="admin">Admins</option>
+        </select>
+      </div>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <div id="users-container">
+        <div class="flex items-center justify-center py-24">
+          <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <!-- Edit User Modal -->
+  <div id="user-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+      <h3 class="text-lg font-bold text-slate-800 mb-5">Edit User</h3>
+      <input type="hidden" id="modal-user-id" />
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1.5">Full Name</label>
+          <input id="modal-name" type="text" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1.5">Role</label>
+          <select id="modal-role" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+            <option value="student">Student</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1.5">Status</label>
+          <select id="modal-status" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeModal()" class="flex-1 py-2.5 border border-slate-300 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 text-sm">Cancel</button>
+        <button onclick="saveUser()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script>
+    let allUsers = [];
+    let currentUser = null;
+
+    async function init() {
+      const result = await Auth.requireAdmin();
+      if (!result) return;
+      currentUser = result.session.user;
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('*, test_attempts(count)')
+        .order('created_at', { ascending: false });
+
+      // Get attempt counts separately
+      const { data: counts } = await supabase
+        .from('test_attempts')
+        .select('user_id');
+      const countMap = {};
+      (counts || []).forEach(c => { countMap[c.user_id] = (countMap[c.user_id] || 0) + 1; });
+
+      allUsers = (data || []).map(u => ({ ...u, attempt_count: countMap[u.id] || 0 }));
+      filterUsers();
+    }
+
+    function filterUsers() {
+      const search = document.getElementById('search').value.toLowerCase();
+      const role = document.getElementById('role-filter').value;
+      let filtered = allUsers.filter(u => {
+        const matchSearch = u.full_name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search);
+        const matchRole = role === 'all' || u.role === role;
+        return matchSearch && matchRole;
+      });
+      renderUsers(filtered);
+    }
+
+    function renderUsers(users) {
+      const container = document.getElementById('users-container');
+      if (!users.length) {
+        container.innerHTML = '<p class="text-center text-slate-400 py-16">No users found.</p>';
+        return;
+      }
+      container.innerHTML = `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-3 border-b border-slate-100 bg-slate-50 grid grid-cols-12 text-xs font-semibold text-slate-500 uppercase">
+            <div class="col-span-4">User</div>
+            <div class="col-span-2 text-center">Role</div>
+            <div class="col-span-2 text-center">Attempts</div>
+            <div class="col-span-2 text-center">Status</div>
+            <div class="col-span-1 text-center">Joined</div>
+            <div class="col-span-1 text-center">Actions</div>
+          </div>
+          <div class="divide-y divide-slate-100">
+            ${users.map(u => `
+            <div class="grid grid-cols-12 items-center px-6 py-4 hover:bg-slate-50 transition-colors">
+              <div class="col-span-4 flex items-center gap-3">
+                <div class="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-700 font-bold text-sm flex-shrink-0">${u.full_name[0]?.toUpperCase()}</div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-slate-800 truncate">${u.full_name}</p>
+                  <p class="text-xs text-slate-400 truncate">${u.email}</p>
+                </div>
+              </div>
+              <div class="col-span-2 text-center">
+                <span class="text-xs px-2.5 py-1 rounded-full font-bold capitalize ${u.role === 'admin' ? 'bg-red-100 text-red-700' : 'bg-indigo-100 text-indigo-700'}">${u.role}</span>
+              </div>
+              <div class="col-span-2 text-center text-sm text-slate-600 font-medium">${u.attempt_count}</div>
+              <div class="col-span-2 text-center">
+                <span class="text-xs px-2.5 py-1 rounded-full font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">${u.is_active ? 'Active' : 'Inactive'}</span>
+              </div>
+              <div class="col-span-1 text-center text-xs text-slate-400">${UI.formatDate(u.created_at)}</div>
+              <div class="col-span-1 text-center">
+                <button onclick='openUserModal(${JSON.stringify(u)})' class="text-indigo-500 hover:text-indigo-700 text-xs font-medium">Edit</button>
+              </div>
+            </div>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    function openUserModal(user) {
+      document.getElementById('modal-user-id').value = user.id;
+      document.getElementById('modal-name').value = user.full_name;
+      document.getElementById('modal-role').value = user.role;
+      document.getElementById('modal-status').value = String(user.is_active);
+      document.getElementById('user-modal').classList.remove('hidden');
+    }
+
+    function closeModal() { document.getElementById('user-modal').classList.add('hidden'); }
+
+    async function saveUser() {
+      const id = document.getElementById('modal-user-id').value;
+      const full_name = document.getElementById('modal-name').value.trim();
+      const role = document.getElementById('modal-role').value;
+      const is_active = document.getElementById('modal-status').value === 'true';
+
+      const { error } = await supabase.from('profiles').update({ full_name, role, is_active }).eq('id', id);
+      if (error) return UI.showToast(error.message, 'error');
+      UI.showToast('User updated!', 'success');
+      closeModal();
+      const user = allUsers.find(u => u.id === id);
+      if (user) { user.full_name = full_name; user.role = role; user.is_active = is_active; }
+      filterUsers();
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = '../index.html'; }
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Panel — NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body class="bg-slate-100 min-h-screen">
+
+  <!-- Admin Sidebar -->
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
+        <div class="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-black text-sm">A</div>
+        <div><p class="text-white font-bold text-sm">NCLEX TMS</p><p class="text-red-400 text-xs font-semibold">Admin Panel</p></div>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+        <a href="index.html" class="sidebar-link active">📊 Overview</a>
+        <a href="users.html" class="sidebar-link">👥 Users</a>
+        <a href="series.html" class="sidebar-link">📝 Test Series</a>
+        <a href="questions.html" class="sidebar-link">❓ Questions</a>
+        <a href="analytics.html" class="sidebar-link">📈 Analytics</a>
+        <a href="notifications.html" class="sidebar-link">🔔 Notifications</a>
+        <a href="settings.html" class="sidebar-link">⚙️ Settings</a>
+        <a href="seed.html" class="sidebar-link">🌱 Seed Data</a>
+        <div class="pt-4 border-t border-slate-800 mt-4">
+          <a href="../dashboard.html" class="sidebar-link text-slate-400">← Student View</a>
+        </div>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-800">
+        <p class="text-xs text-slate-500 mb-2 px-2" id="admin-name">Admin</p>
+        <button onclick="handleLogout()" class="w-full flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="lg:ml-64 min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-slate-100">☰</button>
+      <div>
+        <h2 class="text-lg font-bold text-slate-800">Admin Overview</h2>
+        <p class="text-xs text-slate-500">System-wide statistics</p>
+      </div>
+      <span class="text-xs bg-red-100 text-red-600 font-bold px-3 py-1 rounded-full">Admin Mode</span>
+    </header>
+
+    <main class="flex-1 px-4 lg:px-8 py-8">
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mb-3">👥</div>
+          <p class="text-2xl font-black text-slate-800" id="kpi-users">—</p>
+          <p class="text-xs text-slate-500 mt-0.5">Total Students</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div class="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mb-3">📝</div>
+          <p class="text-2xl font-black text-slate-800" id="kpi-series">—</p>
+          <p class="text-xs text-slate-500 mt-0.5">Test Series</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mb-3">✅</div>
+          <p class="text-2xl font-black text-slate-800" id="kpi-attempts">—</p>
+          <p class="text-xs text-slate-500 mt-0.5">Total Attempts</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div class="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mb-3">❓</div>
+          <p class="text-2xl font-black text-slate-800" id="kpi-questions">—</p>
+          <p class="text-xs text-slate-500 mt-0.5">Total Questions</p>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="grid lg:grid-cols-2 gap-6 mb-8">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <h3 class="font-bold text-slate-800 mb-4">Attempts Over Time</h3>
+          <canvas id="attempts-chart" height="200"></canvas>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <h3 class="font-bold text-slate-800 mb-4">Pass / Fail Distribution</h3>
+          <canvas id="pass-chart" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- Top Performers + Recent Activity -->
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100">
+            <h3 class="font-bold text-slate-800">Top Performers</h3>
+          </div>
+          <div id="top-performers" class="divide-y divide-slate-100"></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100">
+            <h3 class="font-bold text-slate-800">Recent Attempts</h3>
+          </div>
+          <div id="recent-attempts" class="divide-y divide-slate-100"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <script src="../js/config.js"></script>
+  <script>
+    async function init() {
+      const result = await Auth.requireAdmin();
+      if (!result) return;
+      document.getElementById('admin-name').textContent = result.profile.full_name;
+
+      await Promise.all([loadKPIs(), loadCharts(), loadTopPerformers(), loadRecentAttempts()]);
+    }
+
+    async function loadKPIs() {
+      const [{ count: users }, { count: series }, { count: attempts }, { count: questions }] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+        supabase.from('test_series').select('*', { count: 'exact', head: true }),
+        supabase.from('test_attempts').select('*', { count: 'exact', head: true }),
+        supabase.from('questions').select('*', { count: 'exact', head: true })
+      ]);
+      document.getElementById('kpi-users').textContent = users ?? 0;
+      document.getElementById('kpi-series').textContent = series ?? 0;
+      document.getElementById('kpi-attempts').textContent = attempts ?? 0;
+      document.getElementById('kpi-questions').textContent = questions ?? 0;
+    }
+
+    async function loadCharts() {
+      const { data: attempts } = await supabase
+        .from('test_attempts')
+        .select('created_at, is_passed, status')
+        .eq('status', 'completed')
+        .order('created_at');
+
+      // Group by day (last 14 days)
+      const days = {};
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        days[d.toLocaleDateString('en-CA')] = 0;
+      }
+      (attempts || []).forEach(a => {
+        const d = new Date(a.created_at).toLocaleDateString('en-CA');
+        if (days[d] !== undefined) days[d]++;
+      });
+
+      new Chart(document.getElementById('attempts-chart').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(days).map(d => new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })),
+          datasets: [{ label: 'Attempts', data: Object.values(days), backgroundColor: '#6366f1', borderRadius: 6 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+
+      const passed = (attempts || []).filter(a => a.is_passed).length;
+      const failed = (attempts || []).filter(a => !a.is_passed).length;
+      new Chart(document.getElementById('pass-chart').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Passed', 'Failed'],
+          datasets: [{ data: [passed, failed], backgroundColor: ['#22c55e', '#ef4444'], borderWidth: 0 }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } }, cutout: '65%' }
+      });
+    }
+
+    async function loadTopPerformers() {
+      const { data } = await supabase
+        .from('test_attempts')
+        .select('user_id, score_percentage, profiles(full_name, email)')
+        .eq('status', 'completed')
+        .order('score_percentage', { ascending: false })
+        .limit(5);
+
+      const container = document.getElementById('top-performers');
+      if (!data?.length) { container.innerHTML = '<p class="text-center text-slate-400 py-8 text-sm">No data yet.</p>'; return; }
+
+      container.innerHTML = data.map((a, i) => `
+        <div class="flex items-center gap-3 px-6 py-3.5 hover:bg-slate-50 transition-colors">
+          <span class="w-6 h-6 flex items-center justify-center text-xs font-black text-slate-500">${i + 1}</span>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-slate-800 truncate">${a.profiles?.full_name || '—'}</p>
+            <p class="text-xs text-slate-400 truncate">${a.profiles?.email || ''}</p>
+          </div>
+          <span class="text-sm font-black ${UI.scoreColor(a.score_percentage)}">${a.score_percentage?.toFixed(1)}%</span>
+        </div>`).join('');
+    }
+
+    async function loadRecentAttempts() {
+      const { data } = await supabase
+        .from('test_attempts')
+        .select('*, profiles(full_name), test_series(title)')
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      const container = document.getElementById('recent-attempts');
+      if (!data?.length) { container.innerHTML = '<p class="text-center text-slate-400 py-8 text-sm">No attempts yet.</p>'; return; }
+
+      container.innerHTML = data.map(a => `
+        <div class="flex items-center justify-between px-6 py-3.5 hover:bg-slate-50 transition-colors">
+          <div>
+            <p class="text-sm font-semibold text-slate-800">${a.profiles?.full_name || '—'}</p>
+            <p class="text-xs text-slate-400">${a.test_series?.title || '—'} · ${UI.formatDate(a.created_at)}</p>
+          </div>
+          ${a.status === 'completed'
+            ? `<span class="text-sm font-bold ${UI.scoreColor(a.score_percentage)}">${a.score_percentage?.toFixed(1)}%</span>`
+            : `<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-medium">In Progress</span>`}
+        </div>`).join('');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    async function handleLogout() { await Auth.signOut(); window.location.href = '../index.html'; }
+    init();
+  </script>
+</body>
+</html>

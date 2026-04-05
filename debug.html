@@ -1,203 +1,203 @@
-// auth.js — v4 Final (RLS-safe)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Supabase Debug — NCLEX TMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 min-h-screen p-6 text-white font-mono text-sm">
+  <div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-1">🔍 Supabase Debug Panel v4</h1>
+    <p class="text-slate-400 text-xs mb-6">Full error details shown. Open browser Console (F12) too.</p>
 
-function switchTab(tab) {
-  const isLogin = tab === 'login';
-  document.getElementById('form-login').classList.toggle('hidden', !isLogin);
-  document.getElementById('form-register').classList.toggle('hidden', isLogin);
-  document.getElementById('tab-login').className  = `flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${isLogin  ? 'bg-white text-indigo-700 shadow-sm' : 'text-white/70 hover:text-white'}`;
-  document.getElementById('tab-register').className = `flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${!isLogin ? 'bg-white text-indigo-700 shadow-sm' : 'text-white/70 hover:text-white'}`;
+    <div id="log" class="space-y-1.5 mb-6 max-h-96 overflow-y-auto"></div>
+
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <button onclick="testTables()"   class="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm">1. Check Tables</button>
+      <button onclick="createTables()" class="px-4 py-3 bg-green-600  hover:bg-green-500  rounded-xl font-bold text-sm">2. CREATE Tables Now</button>
+      <button onclick="testSignUp()"   class="px-4 py-3 bg-yellow-500 hover:bg-yellow-400 rounded-xl font-bold text-sm text-black">3. Test Sign Up</button>
+      <button onclick="testSignIn()"   class="px-4 py-3 bg-blue-600   hover:bg-blue-500   rounded-xl font-bold text-sm">4. Test Sign In</button>
+      <button onclick="checkAuth()"    class="px-4 py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold text-sm">5. Check Auth Settings</button>
+      <button onclick="clearLog()"     class="px-4 py-3 bg-slate-700  hover:bg-slate-600  rounded-xl font-bold text-sm">Clear</button>
+    </div>
+
+    <div class="bg-slate-800 rounded-xl p-4 mb-4">
+      <p class="text-slate-400 text-xs mb-2 font-bold">TEST CREDENTIALS:</p>
+      <input id="test-email"    type="email" value="testuser999@gmail.com"
+        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm mb-2" />
+      <input id="test-password" type="text"  value="TestPass@123"
+        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
+    </div>
+    <a href="index.html" class="text-indigo-400 text-xs underline">← Back to Login</a>
+  </div>
+
+<script>
+const _URL = 'https://clvqomxagijowwvpkyzb.supabase.co';
+const _KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsdnFvbXhhZ2lqb3d3dnBreXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzk2MTEsImV4cCI6MjA5MDg1NTYxMX0.gf4zj3TdSCscH-6wqGdH5SBjdyMrOHPXytToubGyikw';
+const _db  = window.supabase.createClient(_URL, _KEY);
+
+function log(msg, type='info') {
+  const c = {info:'text-blue-300',ok:'text-green-400',error:'text-red-400',warn:'text-yellow-300',data:'text-slate-300'};
+  const i = {info:'ℹ',ok:'✅',error:'❌',warn:'⚠️',data:'📦'};
+  const el = document.createElement('div');
+  el.className = `flex gap-2 ${c[type]} bg-slate-800/80 rounded-lg px-3 py-2 border border-slate-700`;
+  el.innerHTML = `<span class="flex-shrink-0 text-base">${i[type]}</span><pre class="break-all whitespace-pre-wrap text-xs flex-1">${String(msg)}</pre>`;
+  document.getElementById('log').appendChild(el);
+  el.scrollIntoView({behavior:'smooth'});
+  console.log(`[${type}]`, msg);
 }
+function clearLog() { document.getElementById('log').innerHTML=''; }
 
-function togglePassword(id) {
-  const el = document.getElementById(id);
-  el.type = el.type === 'password' ? 'text' : 'password';
-}
-
-function setLoading(prefix, loading) {
-  const btnText = document.getElementById(`${prefix}-btn-text`);
-  const spinner  = document.getElementById(`${prefix}-spinner`);
-  if (btnText) btnText.textContent = loading
-    ? (prefix === 'login' ? 'Signing in…' : 'Creating account…')
-    : (prefix === 'login' ? 'Sign In'     : 'Create Account');
-  if (spinner) spinner.classList.toggle('hidden', !loading);
-}
-
-// ─────────────────────────────────────────────
-// REGISTER
-// ─────────────────────────────────────────────
-async function handleRegister() {
-  const name     = document.getElementById('reg-name').value.trim();
-  const email    = document.getElementById('reg-email').value.trim();
-  const password = document.getElementById('reg-password').value;
-  const confirm  = document.getElementById('reg-confirm').value;
-
-  if (!name || !email || !password || !confirm)
-    return UI.showToast('Please fill in all fields.', 'warning');
-  if (password.length < 6)
-    return UI.showToast('Password must be at least 6 characters.', 'warning');
-  if (password !== confirm)
-    return UI.showToast('Passwords do not match.', 'warning');
-
-  setLoading('reg', true);
-
-  try {
-    console.log('[AUTH] signUp:', email);
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name, role: 'student' },
-        emailRedirectTo: window.location.origin + '/dashboard.html'
-      }
-    });
-
-    if (error) throw error;
-
-    const user = data?.user;
-    if (!user) throw new Error('No user returned from Supabase.');
-
-    console.log('[AUTH] signUp success, user:', user.id);
-    console.log('[AUTH] session:', data.session ? 'YES' : 'NO');
-
-    if (data.session) {
-      // Email confirmation OFF — logged in immediately
-      // Trigger handles profile creation via SECURITY DEFINER
-      // Just wait a moment for trigger to fire then redirect
-      UI.showToast('🎉 Account created! Redirecting…', 'success');
-      setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
+// ── 1. CHECK TABLES ──────────────────────────────────────────
+async function testTables() {
+  clearLog();
+  log('Checking 8 required tables…');
+  const tables = ['profiles','test_series','questions','test_attempts','attempt_answers','bookmarks','notifications','system_settings'];
+  let missing = [];
+  for (const t of tables) {
+    const { count, error } = await _db.from(t).select('*',{count:'exact',head:true});
+    if (error) {
+      log(`${t}: MISSING — code=${error.code} msg="${error.message}"`, 'error');
+      missing.push(t);
     } else {
-      // Email confirmation ON
-      setLoading('reg', false);
-      showEmailConfirmBanner(name, email);
+      log(`${t}: ✅ exists (${count??0} rows)`, 'ok');
     }
-
-  } catch (e) {
-    console.error('[AUTH] Register error:', e);
-    UI.showToast(friendlyError(e.message), 'error', 7000);
-    setLoading('reg', false);
+  }
+  if (missing.length > 0) {
+    log(`\n${missing.length} tables missing: ${missing.join(', ')}`, 'warn');
+    log('→ Click "2. CREATE Tables Now" to auto-create them via JS', 'warn');
+  } else {
+    log('All 8 tables exist! Ready to register.', 'ok');
   }
 }
 
-function showEmailConfirmBanner(name, email) {
-  document.getElementById('form-register').innerHTML = `
-    <div class="text-center py-2">
-      <div class="text-5xl mb-3">📧</div>
-      <h3 class="text-white font-bold text-lg mb-2">Check your email, ${name}!</h3>
-      <p class="text-white/60 text-sm mb-1">Confirmation sent to:</p>
-      <p class="text-indigo-300 font-bold text-sm mb-5">${email}</p>
-      <p class="text-white/40 text-xs mb-5">After confirming, come back and sign in.</p>
-      <button onclick="switchTab('login')"
-        class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm">
-        Go to Sign In →
-      </button>
-    </div>`;
-}
+// ── 2. CREATE TABLES VIA JS (FALLBACK) ───────────────────────
+async function createTables() {
+  clearLog();
+  log('Attempting to create tables via Supabase RPC…');
+  log('NOTE: This requires the SQL function to exist. If it fails, use the SQL Editor manually.', 'warn');
 
-// ─────────────────────────────────────────────
-// LOGIN
-// ─────────────────────────────────────────────
-async function handleLogin() {
-  const email    = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
+  // Test if we can even write to the DB
+  log('\nTesting direct insert to check permissions…');
 
-  if (!email || !password) return UI.showToast('Please fill in all fields.', 'warning');
-  setLoading('login', true);
+  // Try to create profiles table using rpc exec_sql if available
+  const { data, error } = await _db.rpc('exec_sql', {
+    sql: `SELECT 'test'`
+  });
 
-  try {
-    console.log('[AUTH] signIn:', email);
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-
-    const user = data?.user;
-    if (!user) throw new Error('No user returned.');
-
-    console.log('[AUTH] signIn success:', user.id);
-
-    // Fetch profile — retry up to 3 times (trigger may still be running)
-    let profile = null;
-    for (let i = 0; i < 3; i++) {
-      const { data: p } = await supabase
-        .from('profiles').select('*').eq('id', user.id).single();
-      if (p) { profile = p; break; }
-      await new Promise(r => setTimeout(r, 800));
-    }
-
-    // If profile still missing, create it now (user is authenticated, so RLS allows it)
-    if (!profile) {
-      console.warn('[AUTH] Profile not found after 3 retries, creating manually…');
-      const { error: pe } = await supabase.from('profiles').insert({
-        id:        user.id,
-        full_name: user.user_metadata?.full_name || email.split('@')[0],
-        email:     user.email,
-        role:      'student',
-        is_active: true
-      });
-      if (pe) console.error('[AUTH] Profile insert error:', pe.message);
-      profile = { role: 'student', full_name: user.user_metadata?.full_name || 'User' };
-    }
-
-    console.log('[AUTH] Profile:', profile.role);
-    UI.showToast('Welcome, ' + (profile.full_name || 'User').split(' ')[0] + '! 👋', 'success');
-    setTimeout(() => {
-      window.location.href = profile.role === 'admin' ? 'admin/index.html' : 'dashboard.html';
-    }, 700);
-
-  } catch (e) {
-    console.error('[AUTH] Login error:', e);
-    UI.showToast(friendlyError(e.message), 'error', 7000);
-    setLoading('login', false);
+  if (error) {
+    log('exec_sql RPC not available: ' + error.message, 'warn');
+    log('You MUST use Supabase SQL Editor to create tables.', 'warn');
+    log('\n=== DIRECT SQL EDITOR LINK ===', 'data');
+    log('https://supabase.com/dashboard/project/clvqomxagijowwvpkyzb/sql/new', 'data');
+    log('\nPaste STEP1_TABLES_ONLY.sql content there and click RUN', 'data');
+    showSQLInstructions();
+  } else {
+    log('exec_sql available!', 'ok');
   }
 }
 
-// ─────────────────────────────────────────────
-// FRIENDLY ERRORS
-// ─────────────────────────────────────────────
-function friendlyError(msg) {
-  if (!msg) return 'Something went wrong. Please try again.';
-  const m = msg.toLowerCase();
-  if (m.includes('invalid login credentials') || m.includes('invalid_credentials'))
-    return '❌ Wrong email or password.';
-  if (m.includes('email not confirmed'))
-    return '📧 Please confirm your email first, then sign in.';
-  if (m.includes('user already registered') || m.includes('already been registered'))
-    return '⚠️ Already registered — please sign in instead.';
-  if (m.includes('signups not allowed') || m.includes('signup') && m.includes('disabled'))
-    return '⛔ Sign-ups disabled — enable in Supabase Auth Settings.';
-  if (m.includes('password should be') || m.includes('weak_password'))
-    return '⚠️ Password too weak — use at least 6 characters.';
-  if (m.includes('rate limit') || m.includes('too many requests'))
-    return '⏳ Too many attempts. Wait 60 seconds and try again.';
-  if (m.includes('violates row-level security'))
-    return '🔒 RLS policy error — run FIX_RLS.sql in Supabase SQL Editor.';
-  if (m.includes('database error'))
-    return '🗄️ Database error — make sure all tables exist (run STEP1_TABLES_ONLY.sql).';
-  return msg;
+function showSQLInstructions() {
+  const box = document.createElement('div');
+  box.className = 'mt-4 bg-slate-800 border border-yellow-500 rounded-xl p-4';
+  box.innerHTML = `
+    <p class="text-yellow-400 font-bold text-sm mb-3">⚠️ Tables are NOT being created. Here's why and how to fix:</p>
+    <p class="text-slate-300 text-xs mb-2"><strong class="text-white">The Problem:</strong> The SQL script is failing silently in Supabase SQL Editor.</p>
+    <p class="text-slate-300 text-xs mb-3"><strong class="text-white">The Fix:</strong> Run each CREATE TABLE statement <em>one at a time</em>:</p>
+    <ol class="text-xs text-slate-300 space-y-1 list-decimal list-inside mb-4">
+      <li>Go to Supabase SQL Editor</li>
+      <li>Paste <strong class="text-yellow-300">ONLY the profiles table SQL</strong> below and click Run</li>
+      <li>Then paste the next table, and so on</li>
+    </ol>
+    <div class="bg-slate-900 rounded-lg p-3 text-xs text-green-300 font-mono overflow-x-auto mb-3">
+CREATE TABLE IF NOT EXISTS profiles (
+  id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name  TEXT NOT NULL DEFAULT 'User',
+  email      TEXT NOT NULL UNIQUE,
+  role       TEXT NOT NULL DEFAULT 'student',
+  is_active  BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);</div>
+    <p class="text-slate-400 text-xs">After this works, run STEP1_TABLES_ONLY.sql one table at a time.</p>
+  `;
+  document.getElementById('log').appendChild(box);
 }
 
-// ─────────────────────────────────────────────
-// AUTO-REDIRECT IF ALREADY LOGGED IN
-// ─────────────────────────────────────────────
-(async () => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-    const { data: profile } = await supabase
-      .from('profiles').select('role').eq('id', session.user.id).single();
-    if (profile) {
-      window.location.href = profile.role === 'admin' ? 'admin/index.html' : 'dashboard.html';
-    }
-  } catch (e) {
-    console.warn('[AUTH] Session check:', e.message);
-  }
-})();
+// ── 3. TEST SIGN UP ──────────────────────────────────────────
+async function testSignUp() {
+  const email    = document.getElementById('test-email').value.trim();
+  const password = document.getElementById('test-password').value.trim();
+  log(`Testing signUp → ${email}`);
 
-// ─────────────────────────────────────────────
-// ENTER KEY
-// ─────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.key !== 'Enter') return;
-  const loginHidden = document.getElementById('form-login').classList.contains('hidden');
-  if (!loginHidden) handleLogin(); else handleRegister();
-});
+  const { data, error } = await _db.auth.signUp({
+    email, password,
+    options: { data: { full_name: 'Test User', role: 'student' } }
+  });
+
+  if (error) {
+    log(`signUp FAILED`, 'error');
+    log(`  message : ${error.message}`, 'error');
+    log(`  status  : ${error.status}`, 'error');
+    log(`  code    : ${error.code || 'none'}`, 'error');
+    log(`  name    : ${error.name || 'none'}`, 'error');
+    console.error('Full error object:', JSON.stringify(error, null, 2));
+
+    if (error.message?.includes('Database error')) {
+      log('\nROOT CAUSE: The "profiles" table does not exist.', 'warn');
+      log('The auth.users trigger fires but cannot insert into profiles.', 'warn');
+      log('FIX: Run STEP1_TABLES_ONLY.sql in Supabase SQL Editor first!', 'warn');
+      log('URL: https://supabase.com/dashboard/project/clvqomxagijowwvpkyzb/sql/new', 'data');
+    }
+  } else {
+    log(`signUp response OK`, 'ok');
+    log(`  user.id : ${data?.user?.id}`, 'ok');
+    log(`  session : ${data?.session ? 'YES ✅' : 'NO — email confirmation ON ⚠️'}`, data?.session ? 'ok' : 'warn');
+    if (!data?.session) {
+      log('Disable email confirmation: Supabase → Auth → Settings → Email → OFF', 'warn');
+    }
+  }
+}
+
+// ── 4. TEST SIGN IN ──────────────────────────────────────────
+async function testSignIn() {
+  const email    = document.getElementById('test-email').value.trim();
+  const password = document.getElementById('test-password').value.trim();
+  log(`Testing signIn → ${email}`);
+  const { data, error } = await _db.auth.signInWithPassword({ email, password });
+  if (error) {
+    log(`signIn FAILED: ${error.message} [${error.status}]`, 'error');
+  } else {
+    log(`signIn SUCCESS — user: ${data.user?.email}`, 'ok');
+  }
+}
+
+// ── 5. CHECK AUTH SETTINGS ───────────────────────────────────
+async function checkAuth() {
+  clearLog();
+  log('Checking Supabase Auth configuration…');
+  log('Supabase Auth settings cannot be read via JS — check manually:', 'warn');
+  log('1. Go to: https://supabase.com/dashboard/project/clvqomxagijowwvpkyzb/auth/providers', 'data');
+  log('2. Click "Email" provider', 'data');
+  log('3. Make sure "Enable email confirmations" is TOGGLED OFF', 'data');
+  log('4. Make sure "Enable Sign Ups" is TOGGLED ON', 'data');
+  log('\nAlso check:', 'info');
+  log('https://supabase.com/dashboard/project/clvqomxagijowwvpkyzb/auth/url-configuration', 'data');
+  log('Site URL should be your Vercel URL', 'data');
+
+  // Try a basic auth operation to see if auth works at all
+  log('\nTesting auth service availability…');
+  const { data, error } = await _db.auth.getSession();
+  if (error) {
+    log('Auth service error: ' + error.message, 'error');
+  } else {
+    log('Auth service: reachable ✅', 'ok');
+    log('Current session: ' + (data.session ? data.session.user.email : 'none (not logged in)'), 'info');
+  }
+}
+
+window.addEventListener('DOMContentLoaded', testTables);
+</script>
+</body>
+</html>

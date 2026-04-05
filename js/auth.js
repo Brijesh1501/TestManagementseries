@@ -1,4 +1,4 @@
-// auth.js — v3 (Vercel + Supabase compatible)
+// auth.js — v4 Final (RLS-safe)
 
 function switchTab(tab) {
   const isLogin = tab === 'login';
@@ -41,7 +41,7 @@ async function handleRegister() {
   setLoading('reg', true);
 
   try {
-    console.log('[AUTH] Starting signUp for:', email);
+    console.log('[AUTH] signUp:', email);
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -52,36 +52,22 @@ async function handleRegister() {
       }
     });
 
-    console.log('[AUTH] signUp response:', { data, error });
-
     if (error) throw error;
 
     const user = data?.user;
-    if (!user) throw new Error('No user returned from Supabase signUp.');
+    if (!user) throw new Error('No user returned from Supabase.');
 
-    // Always manually upsert profile — don't rely only on trigger
-    console.log('[AUTH] Upserting profile for user:', user.id);
-    const { error: profileErr } = await supabase.from('profiles').upsert({
-      id:        user.id,
-      full_name: name,
-      email:     email,
-      role:      'student',
-      is_active: true
-    }, { onConflict: 'id' });
+    console.log('[AUTH] signUp success, user:', user.id);
+    console.log('[AUTH] session:', data.session ? 'YES' : 'NO');
 
-    if (profileErr) {
-      console.warn('[AUTH] Profile upsert warning:', profileErr.message);
-    } else {
-      console.log('[AUTH] Profile upserted successfully');
-    }
-
-    // Check if session exists (email confirmation OFF) or not (email confirmation ON)
     if (data.session) {
-      console.log('[AUTH] Session received — redirecting to dashboard');
+      // Email confirmation OFF — logged in immediately
+      // Trigger handles profile creation via SECURITY DEFINER
+      // Just wait a moment for trigger to fire then redirect
       UI.showToast('🎉 Account created! Redirecting…', 'success');
-      setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+      setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
     } else {
-      console.log('[AUTH] No session — email confirmation required');
+      // Email confirmation ON
       setLoading('reg', false);
       showEmailConfirmBanner(name, email);
     }
@@ -97,19 +83,13 @@ function showEmailConfirmBanner(name, email) {
   document.getElementById('form-register').innerHTML = `
     <div class="text-center py-2">
       <div class="text-5xl mb-3">📧</div>
-      <h3 class="text-white font-bold text-lg mb-2">Hi ${name}! Check your email</h3>
-      <p class="text-white/60 text-sm mb-1">Confirmation link sent to:</p>
-      <p class="text-indigo-300 font-bold text-sm mb-4">${email}</p>
-      <div class="bg-white/10 rounded-xl p-4 mb-5 text-left space-y-2">
-        <p class="text-white/70 text-xs font-semibold uppercase tracking-wide">To skip email confirmation:</p>
-        <p class="text-white/60 text-xs">1. Go to Supabase Dashboard</p>
-        <p class="text-white/60 text-xs">2. Authentication → Settings → Email</p>
-        <p class="text-white/60 text-xs">3. Toggle OFF "Enable email confirmations"</p>
-        <p class="text-white/60 text-xs">4. Register again — you'll go straight to dashboard</p>
-      </div>
+      <h3 class="text-white font-bold text-lg mb-2">Check your email, ${name}!</h3>
+      <p class="text-white/60 text-sm mb-1">Confirmation sent to:</p>
+      <p class="text-indigo-300 font-bold text-sm mb-5">${email}</p>
+      <p class="text-white/40 text-xs mb-5">After confirming, come back and sign in.</p>
       <button onclick="switchTab('login')"
-        class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm transition-all">
-        I've confirmed — Sign In →
+        class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm">
+        Go to Sign In →
       </button>
     </div>`;
 }
@@ -125,39 +105,41 @@ async function handleLogin() {
   setLoading('login', true);
 
   try {
-    console.log('[AUTH] Starting signIn for:', email);
+    console.log('[AUTH] signIn:', email);
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    console.log('[AUTH] signIn response:', { user: data?.user?.id, error });
-
     if (error) throw error;
 
     const user = data?.user;
-    if (!user) throw new Error('No user returned from Supabase signIn.');
+    if (!user) throw new Error('No user returned.');
 
-    // Fetch or create profile
+    console.log('[AUTH] signIn success:', user.id);
+
+    // Fetch profile — retry up to 3 times (trigger may still be running)
     let profile = null;
+    for (let i = 0; i < 3; i++) {
+      const { data: p } = await supabase
+        .from('profiles').select('*').eq('id', user.id).single();
+      if (p) { profile = p; break; }
+      await new Promise(r => setTimeout(r, 800));
+    }
 
-    const { data: p, error: pe } = await supabase
-      .from('profiles').select('*').eq('id', user.id).single();
-
-    if (pe || !p) {
-      console.warn('[AUTH] Profile not found, creating it now…');
-      await supabase.from('profiles').upsert({
+    // If profile still missing, create it now (user is authenticated, so RLS allows it)
+    if (!profile) {
+      console.warn('[AUTH] Profile not found after 3 retries, creating manually…');
+      const { error: pe } = await supabase.from('profiles').insert({
         id:        user.id,
         full_name: user.user_metadata?.full_name || email.split('@')[0],
         email:     user.email,
         role:      'student',
         is_active: true
-      }, { onConflict: 'id' });
+      });
+      if (pe) console.error('[AUTH] Profile insert error:', pe.message);
       profile = { role: 'student', full_name: user.user_metadata?.full_name || 'User' };
-    } else {
-      profile = p;
     }
 
-    console.log('[AUTH] Profile:', profile);
-    UI.showToast('Welcome, ' + profile.full_name.split(' ')[0] + '! 👋', 'success');
+    console.log('[AUTH] Profile:', profile.role);
+    UI.showToast('Welcome, ' + (profile.full_name || 'User').split(' ')[0] + '! 👋', 'success');
     setTimeout(() => {
       window.location.href = profile.role === 'admin' ? 'admin/index.html' : 'dashboard.html';
     }, 700);
@@ -178,17 +160,19 @@ function friendlyError(msg) {
   if (m.includes('invalid login credentials') || m.includes('invalid_credentials'))
     return '❌ Wrong email or password.';
   if (m.includes('email not confirmed'))
-    return '📧 Please confirm your email first — check your inbox. Or disable email confirmation in Supabase Auth settings.';
+    return '📧 Please confirm your email first, then sign in.';
   if (m.includes('user already registered') || m.includes('already been registered'))
-    return '⚠️ Email already registered — please sign in instead.';
+    return '⚠️ Already registered — please sign in instead.';
   if (m.includes('signups not allowed') || m.includes('signup') && m.includes('disabled'))
-    return '⛔ Sign-ups are disabled. Go to Supabase → Authentication → Settings → turn ON "Enable sign-ups".';
+    return '⛔ Sign-ups disabled — enable in Supabase Auth Settings.';
   if (m.includes('password should be') || m.includes('weak_password'))
     return '⚠️ Password too weak — use at least 6 characters.';
-  if (m.includes('rate limit') || m.includes('too many requests') || m.includes('429'))
+  if (m.includes('rate limit') || m.includes('too many requests'))
     return '⏳ Too many attempts. Wait 60 seconds and try again.';
-  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed'))
-    return '🌐 Network error — check your internet or Supabase project status.';
+  if (m.includes('violates row-level security'))
+    return '🔒 RLS policy error — run FIX_RLS.sql in Supabase SQL Editor.';
+  if (m.includes('database error'))
+    return '🗄️ Database error — make sure all tables exist (run STEP1_TABLES_ONLY.sql).';
   return msg;
 }
 
@@ -199,14 +183,13 @@ function friendlyError(msg) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    console.log('[AUTH] Existing session found, fetching profile…');
     const { data: profile } = await supabase
       .from('profiles').select('role').eq('id', session.user.id).single();
     if (profile) {
       window.location.href = profile.role === 'admin' ? 'admin/index.html' : 'dashboard.html';
     }
   } catch (e) {
-    console.warn('[AUTH] Session check failed:', e.message);
+    console.warn('[AUTH] Session check:', e.message);
   }
 })();
 
